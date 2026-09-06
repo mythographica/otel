@@ -1,0 +1,127 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractSafe = extractSafe;
+exports.erroredArgsSafe = erroredArgsSafe;
+exports.stringifySafe = stringifySafe;
+exports.buildUnblindReport = buildUnblindReport;
+exports.recordUnblindTelemetry = recordUnblindTelemetry;
+/**
+ * The Unblinder core (2026-09-03, Viktor) — framework-free error-boundary
+ * reporting: build the report from dive's trace + core's getProps, then
+ * record the telemetry. The framework wrapper owns the body discipline
+ * (status code, the headers-sent check, expected-client-error passthrough);
+ * this core owns the report and the UNCONDITIONAL telemetry.
+ *
+ * CONTRACT: report.kind ('caught-unblinded'), the span name
+ * ('mnemonica.caught-exception') and the [unblind] stdout marker are
+ * pinned by downstream consumers (runbooks grep the marker; framework
+ * adapters pin the report shape). Keep them stable.
+ */
+const dive_1 = require("@mnemonica/dive");
+const mnemonica_1 = require("mnemonica");
+const api_1 = require("@opentelemetry/api");
+/**
+ * extract() that cannot throw inside an error path — non-mnemonica
+ * values degrade to their key list.
+ */
+function extractSafe(instance) {
+    try {
+        const result = mnemonica_1.utils.extract(instance);
+        return result;
+    }
+    catch {
+        const result = Object.keys(instance);
+        return result;
+    }
+}
+/**
+ * The attempted constructor args of a FAILED mnemonica construction ride
+ * the errored instance itself: the caught object IS the errored shell
+ * (probed 2026-09-03: caught === creationError's inheritedInstance,
+ * instanceof Error via the spliced prototype chain), and core's own
+ * getProps exposes { args, originalError, … } off the props WeakMap.
+ * Plain errors yield undefined; anything unexpected degrades, never
+ * throws inside a filter.
+ */
+function erroredArgsSafe(error) {
+    try {
+        const props = (0, mnemonica_1.getProps)(error);
+        const result = props?.args;
+        return result;
+    }
+    catch {
+        const result = undefined;
+        return result;
+    }
+}
+/**
+ * JSON.stringify that cannot throw inside an error path — circular or
+ * hostile values degrade to a marker instead of crashing the boundary
+ * (a throwing boundary is exactly the cascade this fights).
+ */
+function stringifySafe(value) {
+    try {
+        const result = JSON.stringify(value);
+        return result;
+    }
+    catch {
+        const result = '"[unserializable report payload]"';
+        return result;
+    }
+}
+/**
+ * Build the unblinded report for a caught failure: the dive branch, the
+ * errored construction edge, the attempted constructor args, the actual
+ * message. Non-Error throws are reported truthfully as such, never
+ * dressed up as Errors.
+ */
+function buildUnblindReport(error) {
+    const isError = error instanceof Error;
+    const message = isError ? error.message : `non-Error thrown (${typeof error})`;
+    const flow = isError ? (0, dive_1.getFlow)(error) : [];
+    // The errored create edge attributes the construction's PARENT
+    // instance (probed 2026-09-03: edge.instance === existentInstance).
+    // The attempted constructor ARGS ride the caught error itself — it
+    // IS the errored shell, and getProps exposes its args (see
+    // erroredArgsSafe above).
+    const erroredEdge = [...flow].reverse().find((edge) => edge.kind === 'create' && edge.status === 'error');
+    const erroredInstance = erroredEdge?.instance;
+    const attemptedArgs = isError ? erroredArgsSafe(error) : undefined;
+    const report = {
+        kind: 'caught-unblinded',
+        message,
+        branch: flow.map((edge) => `${edge.kind}:${edge.name}`),
+        erroredType: erroredEdge?.name ?? null,
+        erroredInstance: erroredInstance ? extractSafe(erroredInstance) : null,
+        attemptedArgs: attemptedArgs ?? null,
+    };
+    return report;
+}
+/**
+ * The unconditional half: an ERROR span with the recorded exception + the
+ * dive branch — inside the request's async context, so the ALS context
+ * manager parents it under the request span on its own — and the stdout
+ * marker line. A non-Error throw is recorded as an attribute:
+ * recordException on a circular object could break exporter
+ * serialization.
+ */
+function recordUnblindTelemetry(report, error) {
+    const span = api_1.trace.getTracer('@mnemonica/otel').startSpan('mnemonica.caught-exception');
+    span.setAttribute('dive.branch', report.branch.join(' → '));
+    if (report.erroredType) {
+        span.setAttribute('mnemonica.errored_type', report.erroredType);
+    }
+    span.setStatus({ code: api_1.SpanStatusCode.ERROR, message: report.message });
+    if (error instanceof Error) {
+        span.recordException(error);
+    }
+    else {
+        span.setAttribute('exception.type', 'non-Error-throw');
+    }
+    span.end();
+    // The [unblind] prefix is a downstream contract — runbooks grep for
+    // exactly this marker.
+    // eslint-disable-next-line no-console
+    console.log(`[unblind] ${stringifySafe(report)}`);
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoidW5ibGluZC5qcyIsInNvdXJjZVJvb3QiOiIiLCJzb3VyY2VzIjpbIi4uL3NyYy91bmJsaW5kLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiI7O0FBNkJBLGtDQVFDO0FBV0QsMENBU0M7QUFPRCxzQ0FRQztBQVFELGdEQXFCQztBQVVELHdEQWtCQztBQWpJRDs7Ozs7Ozs7Ozs7R0FXRztBQUNILDBDQUEwQztBQUMxQyx5Q0FBNEM7QUFDNUMsNENBQTJEO0FBVzNEOzs7R0FHRztBQUNILFNBQWdCLFdBQVcsQ0FBRSxRQUFnQjtJQUM1QyxJQUFJLENBQUM7UUFDSixNQUFNLE1BQU0sR0FBRyxpQkFBSyxDQUFDLE9BQU8sQ0FBQyxRQUFRLENBQUMsQ0FBQztRQUN2QyxPQUFPLE1BQU0sQ0FBQztJQUNmLENBQUM7SUFBQyxNQUFNLENBQUM7UUFDUixNQUFNLE1BQU0sR0FBRyxNQUFNLENBQUMsSUFBSSxDQUFDLFFBQVEsQ0FBQyxDQUFDO1FBQ3JDLE9BQU8sTUFBTSxDQUFDO0lBQ2YsQ0FBQztBQUNGLENBQUM7QUFFRDs7Ozs7Ozs7R0FRRztBQUNILFNBQWdCLGVBQWUsQ0FBRSxLQUFZO0lBQzVDLElBQUksQ0FBQztRQUNKLE1BQU0sS0FBSyxHQUFHLElBQUEsb0JBQVEsRUFBQyxLQUFLLENBQW1DLENBQUM7UUFDaEUsTUFBTSxNQUFNLEdBQUcsS0FBSyxFQUFFLElBQUksQ0FBQztRQUMzQixPQUFPLE1BQU0sQ0FBQztJQUNmLENBQUM7SUFBQyxNQUFNLENBQUM7UUFDUixNQUFNLE1BQU0sR0FBRyxTQUFTLENBQUM7UUFDekIsT0FBTyxNQUFNLENBQUM7SUFDZixDQUFDO0FBQ0YsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxTQUFnQixhQUFhLENBQUUsS0FBYztJQUM1QyxJQUFJLENBQUM7UUFDSixNQUFNLE1BQU0sR0FBRyxJQUFJLENBQUMsU0FBUyxDQUFDLEtBQUssQ0FBQyxDQUFDO1FBQ3JDLE9BQU8sTUFBTSxDQUFDO0lBQ2YsQ0FBQztJQUFDLE1BQU0sQ0FB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LCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIFRoZSBVbmJsaW5kZXIgY29yZSAoMjAyNi0wOS0wMywgVmlrdG9yKSDigJQgZnJhbWV3b3JrLWZyZWUgZXJyb3ItYm91bmRhcnlcbiAqIHJlcG9ydGluZzogYnVpbGQgdGhlIHJlcG9ydCBmcm9tIGRpdmUncyB0cmFjZSArIGNvcmUncyBnZXRQcm9wcywgdGhlblxuICogcmVjb3JkIHRoZSB0ZWxlbWV0cnkuIFRoZSBmcmFtZXdvcmsgd3JhcHBlciBvd25zIHRoZSBib2R5IGRpc2NpcGxpbmVcbiAqIChzdGF0dXMgY29kZSwgdGhlIGhlYWRlcnMtc2VudCBjaGVjaywgZXhwZWN0ZWQtY2xpZW50LWVycm9yIHBhc3N0aHJvdWdoKTtcbiAqIHRoaXMgY29yZSBvd25zIHRoZSByZXBvcnQgYW5kIHRoZSBVTkNPTkRJVElPTkFMIHRlbGVtZXRyeS5cbiAqXG4gKiBDT05UUkFDVDogcmVwb3J0LmtpbmQgKCdjYXVnaHQtdW5ibGluZGVkJyksIHRoZSBzcGFuIG5hbWVcbiAqICgnbW5lbW9uaWNhLmNhdWdodC1leGNlcHRpb24nKSBhbmQgdGhlIFt1bmJsaW5kXSBzdGRvdXQgbWFya2VyIGFyZVxuICogcGlubmVkIGJ5IGRvd25zdHJlYW0gY29uc3VtZXJzIChydW5ib29rcyBncmVwIHRoZSBtYXJrZXI7IGZyYW1ld29ya1xuICogYWRhcHRlcnMgcGluIHRoZSByZXBvcnQgc2hhcGUpLiBLZWVwIHRoZW0gc3RhYmxlLlxuICovXG5pbXBvcnQgeyBnZXRGbG93IH0gZnJvbSAnQG1uZW1vbmljYS9kaXZlJztcbmltcG9ydCB7IHV0aWxzLCBnZXRQcm9wcyB9IGZyb20gJ21uZW1vbmljYSc7XG5pbXBvcnQgeyB0cmFjZSwgU3BhblN0YXR1c0NvZGUgfSBmcm9tICdAb3BlbnRlbGVtZXRyeS9hcGknO1xuXG5leHBvcnQgaW50ZXJmYWNlIFVuYmxpbmRSZXBvcnQge1xuXHRraW5kICAgICAgICAgICAgOiBzdHJpbmc7XG5cdG1lc3NhZ2UgICAgICAgICA6IHN0cmluZztcblx0YnJhbmNoICAgICAgICAgIDogc3RyaW5nW107XG5cdGVycm9yZWRUeXBlICAgICA6IHN0cmluZyB8IG51bGw7XG5cdGVycm9yZWRJbnN0YW5jZSA6IHVua25vd247XG5cdGF0dGVtcHRlZEFyZ3MgICA6IHVua25vd247XG59XG5cbi8qKlxuICogZXh0cmFjdCgpIHRoYXQgY2Fubm90IHRocm93IGluc2lkZSBhbiBlcnJvciBwYXRoIOKAlCBub24tbW5lbW9uaWNhXG4gKiB2YWx1ZXMgZGVncmFkZSB0byB0aGVpciBrZXkgbGlzdC5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGV4dHJhY3RTYWZlIChpbnN0YW5jZTogb2JqZWN0KTogdW5rbm93biB7XG5cdHRyeSB7XG5cdFx0Y29uc3QgcmVzdWx0ID0gdXRpbHMuZXh0cmFjdChpbnN0YW5jZSk7XG5cdFx0cmV0dXJuIHJlc3VsdDtcblx0fSBjYXRjaCB7XG5cdFx0Y29uc3QgcmVzdWx0ID0gT2JqZWN0LmtleXMoaW5zdGFuY2UpO1xuXHRcdHJldHVybiByZXN1bHQ7XG5cdH1cbn1cblxuLyoqXG4gKiBUaGUgYXR0ZW1wdGVkIGNvbnN0cnVjdG9yIGFyZ3Mgb2YgYSBGQUlMRUQgbW5lbW9uaWNhIGNvbnN0cnVjdGlvbiByaWRlXG4gKiB0aGUgZXJyb3JlZCBpbnN0YW5jZSBpdHNlbGY6IHRoZSBjYXVnaHQgb2JqZWN0IElTIHRoZSBlcnJvcmVkIHNoZWxsXG4gKiAocHJvYmVkIDIwMjYtMDktMDM6IGNhdWdodCA9PT0gY3JlYXRpb25FcnJvcidzIGluaGVyaXRlZEluc3RhbmNlLFxuICogaW5zdGFuY2VvZiBFcnJvciB2aWEgdGhlIHNwbGljZWQgcHJvdG90eXBlIGNoYWluKSwgYW5kIGNvcmUncyBvd25cbiAqIGdldFByb3BzIGV4cG9zZXMgeyBhcmdzLCBvcmlnaW5hbEVycm9yLCDigKYgfSBvZmYgdGhlIHByb3BzIFdlYWtNYXAuXG4gKiBQbGFpbiBlcnJvcnMgeWllbGQgdW5kZWZpbmVkOyBhbnl0aGluZyB1bmV4cGVjdGVkIGRlZ3JhZGVzLCBuZXZlclxuICogdGhyb3dzIGluc2lkZSBhIGZpbHRlci5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGVycm9yZWRBcmdzU2FmZSAoZXJyb3I6IEVycm9yKTogdW5rbm93biB7XG5cdHRyeSB7XG5cdFx0Y29uc3QgcHJvcHMgPSBnZXRQcm9wcyhlcnJvcikgYXMgeyBhcmdzPzogdW5rbm93biB9IHwgdW5kZWZpbmVkO1xuXHRcdGNvbnN0IHJlc3VsdCA9IHByb3BzPy5hcmdzO1xuXHRcdHJldHVybiByZXN1bHQ7XG5cdH0gY2F0Y2gge1xuXHRcdGNvbnN0IHJlc3VsdCA9IHVuZGVmaW5lZDtcblx0XHRyZXR1cm4gcmVzdWx0O1xuXHR9XG59XG5cbi8qKlxuICogSlNPTi5zdHJpbmdpZnkgdGhhdCBjYW5ub3QgdGhyb3cgaW5zaWRlIGFuIGVycm9yIHBhdGgg4oCUIGNpcmN1bGFyIG9yXG4gKiBob3N0aWxlIHZhbHVlcyBkZWdyYWRlIHRvIGEgbWFya2VyIGluc3RlYWQgb2YgY3Jhc2hpbmcgdGhlIGJvdW5kYXJ5XG4gKiAoYSB0aHJvd2luZyBib3VuZGFyeSBpcyBleGFjdGx5IHRoZSBjYXNjYWRlIHRoaXMgZmlnaHRzKS5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHN0cmluZ2lmeVNhZmUgKHZhbHVlOiB1bmtub3duKTogc3RyaW5nIHtcblx0dHJ5IHtcblx0XHRjb25zdCByZXN1bHQgPSBKU09OLnN0cmluZ2lmeSh2YWx1ZSk7XG5cdFx0cmV0dXJuIHJlc3VsdDtcblx0fSBjYXRjaCB7XG5cdFx0Y29uc3QgcmVzdWx0ID0gJ1wiW3Vuc2VyaWFsaXphYmxlIHJlcG9ydCBwYXlsb2FkXVwiJztcblx0XHRyZXR1cm4gcmVzdWx0O1xuXHR9XG59XG5cbi8qKlxuICogQnVpbGQgdGhlIHVuYmxpbmRlZCByZXBvcnQgZm9yIGEgY2F1Z2h0IGZhaWx1cmU6IHRoZSBkaXZlIGJyYW5jaCwgdGhlXG4gKiBlcnJvcmVkIGNvbnN0cnVjdGlvbiBlZGdlLCB0aGUgYXR0ZW1wdGVkIGNvbnN0cnVjdG9yIGFyZ3MsIHRoZSBhY3R1YWxcbiAqIG1lc3NhZ2UuIE5vbi1FcnJvciB0aHJvd3MgYXJlIHJlcG9ydGVkIHRydXRoZnVsbHkgYXMgc3VjaCwgbmV2ZXJcbiAqIGRyZXNzZWQgdXAgYXMgRXJyb3JzLlxuICovXG5leHBvcnQgZnVuY3Rpb24gYnVpbGRVbmJsaW5kUmVwb3J0IChlcnJvcjogdW5rbm93bik6IFVuYmxpbmRSZXBvcnQge1xuXHRjb25zdCBpc0Vycm9yID0gZXJyb3IgaW5zdGFuY2VvZiBFcnJvcjtcblx0Y29uc3QgbWVzc2FnZSA9IGlzRXJyb3IgPyBlcnJvci5tZXNzYWdlIDogYG5vbi1FcnJvciB0aHJvd24gKCR7dHlwZW9mIGVycm9yfSlgO1xuXHRjb25zdCBmbG93ID0gaXNFcnJvciA/IGdldEZsb3coZXJyb3IgYXMgRXJyb3IpIDogW107XG5cdC8vIFRoZSBlcnJvcmVkIGNyZWF0ZSBlZGdlIGF0dHJpYnV0ZXMgdGhlIGNvbnN0cnVjdGlvbidzIFBBUkVOVFxuXHQvLyBpbnN0YW5jZSAocHJvYmVkIDIwMjYtMDktMDM6IGVkZ2UuaW5zdGFuY2UgPT09IGV4aXN0ZW50SW5zdGFuY2UpLlxuXHQvLyBUaGUgYXR0ZW1wdGVkIGNvbnN0cnVjdG9yIEFSR1MgcmlkZSB0aGUgY2F1Z2h0IGVycm9yIGl0c2VsZiDigJQgaXRcblx0Ly8gSVMgdGhlIGVycm9yZWQgc2hlbGwsIGFuZCBnZXRQcm9wcyBleHBvc2VzIGl0cyBhcmdzIChzZWVcblx0Ly8gZXJyb3JlZEFyZ3NTYWZlIGFib3ZlKS5cblx0Y29uc3QgZXJyb3JlZEVkZ2UgPSBbLi4uZmxvd10ucmV2ZXJzZSgpLmZpbmQoKGVkZ2UpID0+IGVkZ2Uua2luZCA9PT0gJ2NyZWF0ZScgJiYgZWRnZS5zdGF0dXMgPT09ICdlcnJvcicpO1xuXHRjb25zdCBlcnJvcmVkSW5zdGFuY2UgPSBlcnJvcmVkRWRnZT8uaW5zdGFuY2U7XG5cdGNvbnN0IGF0dGVtcHRlZEFyZ3MgPSBpc0Vycm9yID8gZXJyb3JlZEFyZ3NTYWZlKGVycm9yIGFzIEVycm9yKSA6IHVuZGVmaW5lZDtcblx0Y29uc3QgcmVwb3J0OiBVbmJsaW5kUmVwb3J0ID0ge1xuXHRcdGtpbmQgICAgICAgICAgICA6ICdjYXVnaHQtdW5ibGluZGVkJyxcblx0XHRtZXNzYWdlLFxuXHRcdGJyYW5jaCAgICAgICAgICA6IGZsb3cubWFwKChlZGdlKSA9PiBgJHtlZGdlLmtpbmR9OiR7ZWRnZS5uYW1lfWApLFxuXHRcdGVycm9yZWRUeXBlICAgICA6IGVycm9yZWRFZGdlPy5uYW1lID8/IG51bGwsXG5cdFx0ZXJyb3JlZEluc3RhbmNlIDogZXJyb3JlZEluc3RhbmNlID8gZXh0cmFjdFNhZmUoZXJyb3JlZEluc3RhbmNlKSA6IG51bGwsXG5cdFx0YXR0ZW1wdGVkQXJncyAgIDogYXR0ZW1wdGVkQXJncyA/PyBudWxsLFxuXHR9O1xuXHRyZXR1cm4gcmVwb3J0O1xufVxuXG4vKipcbiAqIFRoZSB1bmNvbmRpdGlvbmFsIGhhbGY6IGFuIEVSUk9SIHNwYW4gd2l0aCB0aGUgcmVjb3JkZWQgZXhjZXB0aW9uICsgdGhlXG4gKiBkaXZlIGJyYW5jaCDigJQgaW5zaWRlIHRoZSByZXF1ZXN0J3MgYXN5bmMgY29udGV4dCwgc28gdGhlIEFMUyBjb250ZXh0XG4gKiBtYW5hZ2VyIHBhcmVudHMgaXQgdW5kZXIgdGhlIHJlcXVlc3Qgc3BhbiBvbiBpdHMgb3duIOKAlCBhbmQgdGhlIHN0ZG91dFxuICogbWFya2VyIGxpbmUuIEEgbm9uLUVycm9yIHRocm93IGlzIHJlY29yZGVkIGFzIGFuIGF0dHJpYnV0ZTpcbiAqIHJlY29yZEV4Y2VwdGlvbiBvbiBhIGNpcmN1bGFyIG9iamVjdCBjb3VsZCBicmVhayBleHBvcnRlclxuICogc2VyaWFsaXphdGlvbi5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHJlY29yZFVuYmxpbmRUZWxlbWV0cnkgKHJlcG9ydDogVW5ibGluZFJlcG9ydCwgZXJyb3I6IHVua25vd24pOiB2b2lkIHtcblx0Y29uc3Qgc3BhbiA9IHRyYWNlLmdldFRyYWNlcignQG1uZW1vbmljYS9vdGVsJykuc3RhcnRTcGFuKCdtbmVtb25pY2EuY2F1Z2h0LWV4Y2VwdGlvbicpO1xuXHRzcGFuLnNldEF0dHJpYnV0ZSgnZGl2ZS5icmFuY2gnLCByZXBvcnQuYnJhbmNoLmpvaW4oJyDihpIgJykpO1xuXHRpZiAocmVwb3J0LmVycm9yZWRUeXBlKSB7XG5cdFx0c3Bhbi5zZXRBdHRyaWJ1dGUoJ21uZW1vbmljYS5lcnJvcmVkX3R5cGUnLCByZXBvcnQuZXJyb3JlZFR5cGUpO1xuXHR9XG5cdHNwYW4uc2V0U3RhdHVzKHsgY29kZTogU3BhblN0YXR1c0NvZGUuRVJST1IsIG1lc3NhZ2U6IHJlcG9ydC5tZXNzYWdlIH0pO1xuXHRpZiAoZXJyb3IgaW5zdGFuY2VvZiBFcnJvcikge1xuXHRcdHNwYW4ucmVjb3JkRXhjZXB0aW9uKGVycm9yKTtcblx0fSBlbHNlIHtcblx0XHRzcGFuLnNldEF0dHJpYnV0ZSgnZXhjZXB0aW9uLnR5cGUnLCAnbm9uLUVycm9yLXRocm93Jyk7XG5cdH1cblx0c3Bhbi5lbmQoKTtcblxuXHQvLyBUaGUgW3VuYmxpbmRdIHByZWZpeCBpcyBhIGRvd25zdHJlYW0gY29udHJhY3Qg4oCUIHJ1bmJvb2tzIGdyZXAgZm9yXG5cdC8vIGV4YWN0bHkgdGhpcyBtYXJrZXIuXG5cdC8vIGVzbGludC1kaXNhYmxlLW5leHQtbGluZSBuby1jb25zb2xlXG5cdGNvbnNvbGUubG9nKGBbdW5ibGluZF0gJHtzdHJpbmdpZnlTYWZlKHJlcG9ydCl9YCk7XG59XG4iXX0=

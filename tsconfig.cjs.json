@@ -1,0 +1,14 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"module": "CommonJS",
+		"moduleResolution": "Node10",
+		"outDir": "./build-cjs",
+		"declaration": false,
+		"declarationMap": false,
+		"paths": {
+			"mnemonica/module": ["./node_modules/mnemonica/build/index.d.ts"]
+		}
+	},
+	"exclude": ["node_modules", "build", "build-cjs", "test"]
+}

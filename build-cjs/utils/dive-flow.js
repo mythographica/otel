@@ -1,0 +1,37 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.formatFlow = formatFlow;
+exports.errorContext = errorContext;
+/**
+ * Read-side helpers over @mnemonica/dive's trace — the two idioms error
+ * boundaries kept re-deriving by hand (four formatter copies and two
+ * fallback copies in finecut before these existed).
+ */
+const dive_1 = require("@mnemonica/dive");
+/**
+ * Canonical edge → plain-JSON shaping for reports, filters and logs.
+ * Same target semantics as getFlow: Error | instance | current cursor.
+ */
+function formatFlow(target) {
+    const result = (0, dive_1.getFlow)(target).map((edge) => {
+        const formatted = {
+            name: edge.name,
+            kind: edge.kind,
+            status: edge.status,
+            duration: edge.duration ?? null,
+        };
+        return formatted;
+    });
+    return result;
+}
+/**
+ * The "who failed" fallback: the instance pinned to the error at its
+ * deepest wrapped boundary, or the current ambient context when the error
+ * never crossed one.
+ */
+function errorContext(error) {
+    const pinned = (0, dive_1.getErrorInstance)(error);
+    const result = pinned ?? (0, dive_1.current)();
+    return result;
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiZGl2ZS1mbG93LmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vc3JjL3V0aWxzL2RpdmUtZmxvdy50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiOztBQXdCQSxnQ0FXQztBQU9ELG9DQUlDO0FBOUNEOzs7O0dBSUc7QUFDSCwwQ0FBcUU7QUFlckU7OztHQUdHO0FBQ0gsU0FBZ0IsVUFBVSxDQUFFLE1BQWdCO0lBQzNDLE1BQU0sTUFBTSxHQUFHLElBQUEsY0FBTyxFQUFDLE1BQU0sQ0FBQyxDQUFDLEdBQUcsQ0FBQyxDQUFDLElBQUksRUFBRSxFQUFFO1FBQzNDLE1BQU0sU0FBUyxHQUFzQjtZQUNwQyxJQUFJLEVBQU8sSUFBSSxDQUFDLElBQUk7WUFDcEIsSUFBSSxFQUFPLElBQUksQ0FBQyxJQUFJO1lBQ3BCLE1BQU0sRUFBSyxJQUFJLENBQUMsTUFBTTtZQUN0QixRQUFRLEVBQUcsSUFBSSxDQUFDLFFBQVEsSUFBSSxJQUFJO1NBQ2hDLENBQUM7UUFDRixPQUFPLFNBQVMsQ0FBQztJQUNsQixDQUFDLENBQUMsQ0FBQztJQUNILE9BQU8sTUFBTSxDQUFDO0FBQ2YsQ0FBQztBQUVEOzs7O0dBSUc7QUFDSCxTQUFnQixZQUFZLENBQUUsS0FBWTtJQUN6QyxNQUFNLE1BQU0sR0FBRyxJQUFBLHVCQUFnQixFQUFDLEtBQUssQ0FBQyxDQUFDO0lBQ3ZDLE1BQU0sTUFBTSxHQUFHLE1BQU0sSUFBSSxJQUFBLGNBQU8sR0FBRSxDQUFDO0lBQ25DLE9BQU8sTUFBTSxDQUFDO0FBQ2YsQ0FBQyIsInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogUmVhZC1zaWRlIGhlbHBlcnMgb3ZlciBAbW5lbW9uaWNhL2RpdmUncyB0cmFjZSDigJQgdGhlIHR3byBpZGlvbXMgZXJyb3JcbiAqIGJvdW5kYXJpZXMga2VwdCByZS1kZXJpdmluZyBieSBoYW5kIChmb3VyIGZvcm1hdHRlciBjb3BpZXMgYW5kIHR3b1xuICogZmFsbGJhY2sgY29waWVzIGluIGZpbmVjdXQgYmVmb3JlIHRoZXNlIGV4aXN0ZWQpLlxuICovXG5pbXBvcnQgeyBnZXRGbG93LCBnZXRFcnJvckluc3RhbmNlLCBjdXJyZW50IH0gZnJvbSAnQG1uZW1vbmljYS9kaXZlJztcbmltcG9ydCB0eXBlIHsgRmxvd0VkZ2UgfSBmcm9tICdAbW5lbW9uaWNhL2RpdmUnO1xuXG4vKipcbiAqIEpTT04tc2FmZSBzaGFwZSBvZiBhIHRyYWNlIGVkZ2U6IHRoZSBGbG93RWRnZSB3aXRob3V0IHRoZSBsaXZlIGluc3RhbmNlXG4gKiByZWZlcmVuY2UgKG1uZW1vbmljYSBpbnN0YW5jZXMgZG9uJ3Qgc3Vydml2ZSBzZXJpYWxpemF0aW9uKSwgZHVyYXRpb25cbiAqIG5vcm1hbGl6ZWQgdG8gbnVsbCB3aGlsZSB1bnNldHRsZWQuXG4gKi9cbmV4cG9ydCBpbnRlcmZhY2UgRm9ybWF0dGVkRmxvd0VkZ2Uge1xuXHRuYW1lICAgICA6IHN0cmluZztcblx0a2luZCAgICAgOiBGbG93RWRnZVsna2luZCddO1xuXHRzdGF0dXMgICA6IEZsb3dFZGdlWydzdGF0dXMnXTtcblx0ZHVyYXRpb24gOiBudW1iZXIgfCBudWxsO1xufVxuXG4vKipcbiAqIENhbm9uaWNhbCBlZGdlIOKGkiBwbGFpbi1KU09OIHNoYXBpbmcgZm9yIHJlcG9ydHMsIGZpbHRlcnMgYW5kIGxvZ3MuXG4gKiBTYW1lIHRhcmdldCBzZW1hbnRpY3MgYXMgZ2V0RmxvdzogRXJyb3IgfCBpbnN0YW5jZSB8IGN1cnJlbnQgY3Vyc29yLlxuICovXG5leHBvcnQgZnVuY3Rpb24gZm9ybWF0RmxvdyAodGFyZ2V0PzogdW5rbm93bik6IEZvcm1hdHRlZEZsb3dFZGdlW10ge1xuXHRjb25zdCByZXN1bHQgPSBnZXRGbG93KHRhcmdldCkubWFwKChlZGdlKSA9PiB7XG5cdFx0Y29uc3QgZm9ybWF0dGVkOiBGb3JtYXR0ZWRGbG93RWRnZSA9IHtcblx0XHRcdG5hbWUgICAgIDogZWRnZS5uYW1lLFxuXHRcdFx0a2luZCAgICAgOiBlZGdlLmtpbmQsXG5cdFx0XHRzdGF0dXMgICA6IGVkZ2Uuc3RhdHVzLFxuXHRcdFx0ZHVyYXRpb24gOiBlZGdlLmR1cmF0aW9uID8/IG51bGwsXG5cdFx0fTtcblx0XHRyZXR1cm4gZm9ybWF0dGVkO1xuXHR9KTtcblx0cmV0dXJuIHJlc3VsdDtcbn1cblxuLyoqXG4gKiBUaGUgXCJ3aG8gZmFpbGVkXCIgZmFsbGJhY2s6IHRoZSBpbnN0YW5jZSBwaW5uZWQgdG8gdGhlIGVycm9yIGF0IGl0c1xuICogZGVlcGVzdCB3cmFwcGVkIGJvdW5kYXJ5LCBvciB0aGUgY3VycmVudCBhbWJpZW50IGNvbnRleHQgd2hlbiB0aGUgZXJyb3JcbiAqIG5ldmVyIGNyb3NzZWQgb25lLlxuICovXG5leHBvcnQgZnVuY3Rpb24gZXJyb3JDb250ZXh0IChlcnJvcjogRXJyb3IpOiBvYmplY3QgfCB1bmRlZmluZWQge1xuXHRjb25zdCBwaW5uZWQgPSBnZXRFcnJvckluc3RhbmNlKGVycm9yKTtcblx0Y29uc3QgcmVzdWx0ID0gcGlubmVkID8/IGN1cnJlbnQoKTtcblx0cmV0dXJuIHJlc3VsdDtcbn1cbiJdfQ==

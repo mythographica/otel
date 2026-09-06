@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isMnemonicaInstance = isMnemonicaInstance;
+/**
+ * Runtime type guard for mnemonica instances.
+ * Uses mnemonica's getProps() — no instanceof hacks, works across realms.
+ */
+const module_1 = require("mnemonica/module");
+function isMnemonicaInstance(value) {
+    return value != null && typeof value === 'object' && (0, module_1.getProps)(value) !== undefined;
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiaXMtbW5lbW9uaWNhLWluc3RhbmNlLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vc3JjL3V0aWxzL2lzLW1uZW1vbmljYS1pbnN0YW5jZS50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiOztBQU1BLGtEQUVDO0FBUkQ7OztHQUdHO0FBQ0gsNkNBQTRDO0FBRTVDLFNBQWdCLG1CQUFtQixDQUFFLEtBQWM7SUFDbEQsT0FBTyxLQUFLLElBQUksSUFBSSxJQUFJLE9BQU8sS0FBSyxLQUFLLFFBQVEsSUFBSSxJQUFBLGlCQUFRLEVBQUMsS0FBSyxDQUFDLEtBQUssU0FBUyxDQUFDO0FBQ3BGLENBQUMiLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIFJ1bnRpbWUgdHlwZSBndWFyZCBmb3IgbW5lbW9uaWNhIGluc3RhbmNlcy5cbiAqIFVzZXMgbW5lbW9uaWNhJ3MgZ2V0UHJvcHMoKSDigJQgbm8gaW5zdGFuY2VvZiBoYWNrcywgd29ya3MgYWNyb3NzIHJlYWxtcy5cbiAqL1xuaW1wb3J0IHsgZ2V0UHJvcHMgfSBmcm9tICdtbmVtb25pY2EvbW9kdWxlJztcblxuZXhwb3J0IGZ1bmN0aW9uIGlzTW5lbW9uaWNhSW5zdGFuY2UgKHZhbHVlOiB1bmtub3duKTogdmFsdWUgaXMgUmVjb3JkPHN0cmluZywgdW5rbm93bj4ge1xuXHRyZXR1cm4gdmFsdWUgIT0gbnVsbCAmJiB0eXBlb2YgdmFsdWUgPT09ICdvYmplY3QnICYmIGdldFByb3BzKHZhbHVlKSAhPT0gdW5kZWZpbmVkO1xufVxuIl19

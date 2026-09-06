@@ -1,0 +1,37 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.feedPreRootFromRequest = feedPreRootFromRequest;
+/**
+ * Thunderstruck boundary helper — the framework-free half of what a
+ * framework's interceptor/middleware does: shape any HTTP framework's
+ * request into the
+ * raw pre-root payload and stamp its part objects, so pipes and construct
+ * handlers correlate the payload by OBJECT IDENTITY (see pre-root.ts for
+ * the store's lifetime and correlation semantics).
+ *
+ * Framework mapping notes:
+ *  - Express: pass `req` directly — method/url/params(→req.params)/
+ *    query/body/headers all sit on it.
+ *  - Fastify: pass the FastifyRequest — it exposes params/query/body/
+ *    headers; `method`/`url` exist on it since Fastify v4 (fall back to
+ *    `req.raw` if you target older majors).
+ *  - raw http: `url`/`method` are on IncomingMessage; body/query/params
+ *    are yours to parse first (or omit — primitives and missing parts
+ *    simply don't correlate, the feed still records).
+ */
+const pre_root_js_1 = require("./pre-root.js");
+function feedPreRootFromRequest(req, options) {
+    const raw = {
+        method: req.method,
+        url: req.url,
+        params: req.params,
+        query: req.query,
+        body: req.body,
+        headers: req.headers,
+    };
+    if (options?.storeRequest === true) {
+        raw.request = req;
+    }
+    (0, pre_root_js_1.feedPreRoot)(raw);
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiZmVlZC1mcm9tLXJlcXVlc3QuanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi8uLi9zcmMvdGh1bmRlcnN0cnVjay9mZWVkLWZyb20tcmVxdWVzdC50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiOztBQXlDQSx3REFhQztBQXRERDs7Ozs7Ozs7Ozs7Ozs7Ozs7R0FpQkc7QUFDSCwrQ0FBb0U7QUF1QnBFLFNBQWdCLHNCQUFzQixDQUFFLEdBQWdCLEVBQUUsT0FBNEI7SUFDckYsTUFBTSxHQUFHLEdBQXNCO1FBQzlCLE1BQU0sRUFBSyxHQUFHLENBQUMsTUFBTTtRQUNyQixHQUFHLEVBQVEsR0FBRyxDQUFDLEdBQUc7UUFDbEIsTUFBTSxFQUFLLEdBQUcsQ0FBQyxNQUFNO1FBQ3JCLEtBQUssRUFBTSxHQUFHLENBQUMsS0FBSztRQUNwQixJQUFJLEVBQU8sR0FBRyxDQUFDLElBQUk7UUFDbkIsT0FBTyxFQUFJLEdBQUcsQ0FBQyxPQUFPO0tBQ3RCLENBQUM7SUFDRixJQUFJLE9BQU8sRUFBRSxZQUFZLEtBQUssSUFBSSxFQUFFLENBQUM7UUFDcEMsR0FBRyxDQUFDLE9BQU8sR0FBRyxHQUFHLENBQUM7SUFDbkIsQ0FBQztJQUNELElBQUEseUJBQVcsRUFBQyxHQUFHLENBQUMsQ0FBQztBQUNsQixDQUFDIiwic291cmNlc0NvbnRlbnQiOlsiLyoqXG4gKiBUaHVuZGVyc3RydWNrIGJvdW5kYXJ5IGhlbHBlciDigJQgdGhlIGZyYW1ld29yay1mcmVlIGhhbGYgb2Ygd2hhdCBhXG4gKiBmcmFtZXdvcmsncyBpbnRlcmNlcHRvci9taWRkbGV3YXJlIGRvZXM6IHNoYXBlIGFueSBIVFRQIGZyYW1ld29yaydzXG4gKiByZXF1ZXN0IGludG8gdGhlXG4gKiByYXcgcHJlLXJvb3QgcGF5bG9hZCBhbmQgc3RhbXAgaXRzIHBhcnQgb2JqZWN0cywgc28gcGlwZXMgYW5kIGNvbnN0cnVjdFxuICogaGFuZGxlcnMgY29ycmVsYXRlIHRoZSBwYXlsb2FkIGJ5IE9CSkVDVCBJREVOVElUWSAoc2VlIHByZS1yb290LnRzIGZvclxuICogdGhlIHN0b3JlJ3MgbGlmZXRpbWUgYW5kIGNvcnJlbGF0aW9uIHNlbWFudGljcykuXG4gKlxuICogRnJhbWV3b3JrIG1hcHBpbmcgbm90ZXM6XG4gKiAgLSBFeHByZXNzOiBwYXNzIGByZXFgIGRpcmVjdGx5IOKAlCBtZXRob2QvdXJsL3BhcmFtcyjihpJyZXEucGFyYW1zKS9cbiAqICAgIHF1ZXJ5L2JvZHkvaGVhZGVycyBhbGwgc2l0IG9uIGl0LlxuICogIC0gRmFzdGlmeTogcGFzcyB0aGUgRmFzdGlmeVJlcXVlc3Qg4oCUIGl0IGV4cG9zZXMgcGFyYW1zL3F1ZXJ5L2JvZHkvXG4gKiAgICBoZWFkZXJzOyBgbWV0aG9kYC9gdXJsYCBleGlzdCBvbiBpdCBzaW5jZSBGYXN0aWZ5IHY0IChmYWxsIGJhY2sgdG9cbiAqICAgIGByZXEucmF3YCBpZiB5b3UgdGFyZ2V0IG9sZGVyIG1ham9ycykuXG4gKiAgLSByYXcgaHR0cDogYHVybGAvYG1ldGhvZGAgYXJlIG9uIEluY29taW5nTWVzc2FnZTsgYm9keS9xdWVyeS9wYXJhbXNcbiAqICAgIGFyZSB5b3VycyB0byBwYXJzZSBmaXJzdCAob3Igb21pdCDigJQgcHJpbWl0aXZlcyBhbmQgbWlzc2luZyBwYXJ0c1xuICogICAgc2ltcGx5IGRvbid0IGNvcnJlbGF0ZSwgdGhlIGZlZWQgc3RpbGwgcmVjb3JkcykuXG4gKi9cbmltcG9ydCB7IGZlZWRQcmVSb290LCB0eXBlIFJhd1ByZVJvb3RQYXlsb2FkIH0gZnJvbSAnLi9wcmUtcm9vdC5qcyc7XG5cbi8qKiBTdHJ1Y3R1cmFsIG1pbmltdW0gb2YgYW4gSFRUUCByZXF1ZXN0IGFueSBmcmFtZXdvcmsgY2FuIHNhdGlzZnkuICovXG5leHBvcnQgaW50ZXJmYWNlIFJlcXVlc3RMaWtlIHtcblx0bWV0aG9kICAgOiBzdHJpbmc7XG5cdHVybCAgICAgIDogc3RyaW5nO1xuXHRwYXJhbXM/ICA6IHVua25vd247XG5cdHF1ZXJ5PyAgIDogdW5rbm93bjtcblx0Ym9keT8gICAgOiB1bmtub3duO1xuXHRoZWFkZXJzPyA6IHVua25vd247XG59XG5cbmV4cG9ydCBpbnRlcmZhY2UgRmVlZFByZVJvb3RPcHRpb25zIHtcblx0LyoqXG5cdCAqIExpbmsgdGhlIHJhdyByZXF1ZXN0IG9iamVjdCBpbnRvIHRoZSBwcmUtcm9vdCByZWNvcmQgKGByYXcucmVxdWVzdGApXG5cdCAqIEFORCBzdGFtcCBpdCBhcyBhIGNvcnJlbGF0aW9uIGtleSwgc28gZ2V0UHJlUm9vdChyZXEpIHJlc29sdmVzIGZyb21cblx0ICogYW55d2hlcmUgdGhlIHJlcXVlc3QgaXMgcmVhY2hhYmxlIOKAlCBlLmcuIGFuIGVycm9yIGJvdW5kYXJ5IGhvbGRpbmdcblx0ICogb25seSB0aGUgcmVxdWVzdC4gUmV0ZW50aW9uIGlzIHVuY2hhbmdlZDogdGhlIHJlY29yZCBkaWVzIHdpdGggdGhlXG5cdCAqIHJlcXVlc3QuXG5cdCAqL1xuXHRzdG9yZVJlcXVlc3Q/OiBib29sZWFuO1xufVxuXG5leHBvcnQgZnVuY3Rpb24gZmVlZFByZVJvb3RGcm9tUmVxdWVzdCAocmVxOiBSZXF1ZXN0TGlrZSwgb3B0aW9ucz86IEZlZWRQcmVSb290T3B0aW9ucyk6IHZvaWQge1xuXHRjb25zdCByYXc6IFJhd1ByZVJvb3RQYXlsb2FkID0ge1xuXHRcdG1ldGhvZCAgIDogcmVxLm1ldGhvZCxcblx0XHR1cmwgICAgICA6IHJlcS51cmwsXG5cdFx0cGFyYW1zICAgOiByZXEucGFyYW1zLFxuXHRcdHF1ZXJ5ICAgIDogcmVxLnF1ZXJ5LFxuXHRcdGJvZHkgICAgIDogcmVxLmJvZHksXG5cdFx0aGVhZGVycyAgOiByZXEuaGVhZGVycyxcblx0fTtcblx0aWYgKG9wdGlvbnM/LnN0b3JlUmVxdWVzdCA9PT0gdHJ1ZSkge1xuXHRcdHJhdy5yZXF1ZXN0ID0gcmVxO1xuXHR9XG5cdGZlZWRQcmVSb290KHJhdyk7XG59XG4iXX0=
