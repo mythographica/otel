@@ -93,7 +93,9 @@ a `{"type":"commonjs"}` package.json there. Its `paths` shim maps
 resolution ignores the exports map — at runtime the `require` condition
 resolves straight to core's CJS build, so both flavors share the one
 mnemonica singleton (the CJS smoke asserts exactly that). The CJS flavor
-loads dive through `require(esm)` — Node ≥ 20.19 / 22.
+loads dive through its exports `require` condition when dive ≥0.9 is
+installed (plain CJS); older dives fall back to `require(esm)` —
+Node ≥ 20.19 / 22.
 
 **vitest config caveat:** `vitest.config.ts` aliases `mnemonica` to
 `../core/module/index.js` when that sibling checkout exists (local dev

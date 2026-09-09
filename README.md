@@ -33,9 +33,11 @@ npm install @mnemonica/otel mnemonica @mnemonica/dive @opentelemetry/api
 dependencies — they are process singletons (the type registry, the edge
 ring, the OTel API), so the app must own exactly one copy of each.
 
-Dual build: ESM (`import`) and CommonJS (`require`) both work. The CJS
-flavor loads `@mnemonica/dive` through `require(esm)`, so `require()`
-consumers need Node ≥ 20.19 / 22.
+Dual build: ESM (`import`) and CommonJS (`require`) both work. With
+`@mnemonica/dive` ≥ 0.9.0 the `require()` chain is plain CJS end-to-end
+(dive's exports map carries a `require` condition); against older dive
+versions the CJS flavor loads dive through `require(esm)`, needing
+Node ≥ 20.19 / 22.
 
 ## What's inside
 
@@ -51,6 +53,87 @@ consumers need Node ≥ 20.19 / 22.
 | `buildUnblindReport(error)` / `recordUnblindTelemetry(report, error)` | the Unblinder core: the dive branch + errored construction + attempted args, plus the unconditional span and stdout marker |
 | `isMnemonicaInstance(value)` | realm-safe type guard via `getProps()` |
 | `formatFlow(target?)` / `errorContext(error)` | read-side helpers over dive's trace |
+
+## What you get in your traces
+
+With the wiring below, one HTTP request produces ONE coherent trace:
+
+```
+HTTP POST /users                  ← request span (runInRequestScope)
+├─ mnemonica.UserEntity           ← construction span (MnemonicaOtelProvider)
+│  └─ mnemonica.UserResponse      ←   parented on the prototype lineage
+├─ UserService.createUser         ← call span (DiveOtelProvider)
+│  └─ …                           ←   async hops attributed (AsyncFlowProvider)
+└─ mnemonica.caught-exception     ← on failure only: the Unblinder span
+```
+
+- **Construction spans follow the prototype chain.** `MnemonicaOtelProvider`
+  emits `mnemonica.<TypeName>` spans and parents each
+  `new instance.SubType()` on the span of the instance it was constructed
+  from — the trace tree IS the data-flow lineage, not the call stack. Span
+  attributes carry `mnemonica.type_name` and the lifecycle `mnemonica.hook`.
+- **Call spans follow dive's trace.** `DiveOtelProvider` turns every
+  dive-wrapped invocation into a span parented on dive's own edge graph;
+  async spans close at settle, so durations are real — a queue callback
+  fired 30s later measures 30s, attached to its true parent.
+- **Unwrapped async hops are still attributed.** Timers, promise
+  continuations and generator suspensions that nobody wrapped land under
+  the parental dive edge via the `AsyncFlowProvider` ALS backbone.
+- **Errors arrive with their data.** A caught exception carries the dive
+  branch that led to it, the errored construction, and the attempted args —
+  `buildUnblindReport` shapes it, `recordUnblindTelemetry` emits the
+  `mnemonica.caught-exception` span plus the `[unblind]` stdout marker.
+- **Dive edges join OTel traces.** `DiveOtelProvider` publishes
+  edgeId → traceId pairs on a bounded `globalThis.__mnemonicaDiveTraceIds`
+  map, so an external trace consumer reading dive's edge ring can jump from
+  any edge to the exact backend trace it belongs to.
+
+## Wire it up
+
+The package speaks the OTel **API** only — bring your own SDK and exporter:
+
+```bash
+npm install @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
+```
+
+```typescript
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+// any OTel backend works; the OTLP HTTP exporter defaults to
+// localhost:4318 (the Jaeger all-in-one port)
+const sdk = new NodeTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter())],
+});
+sdk.register();
+
+import { defaultTypes } from 'mnemonica';
+import {
+  attachHooks,
+  MnemonicaOtelProvider,
+  DiveOtelProvider,
+  AsyncFlowProvider,
+} from '@mnemonica/otel';
+
+const otel      = new MnemonicaOtelProvider();  // spans on constructions
+const diveOtel  = new DiveOtelProvider();       // spans on wrapped calls
+const asyncFlow = new AsyncFlowProvider();      // ALS attribution backbone
+
+attachHooks(defaultTypes);        // mnemonica lifecycle → dive edges
+otel.attachHooks(defaultTypes);   // mnemonica lifecycle → OTel spans
+diveOtel.attach();                // dive edges → OTel spans
+asyncFlow.attach();               // unwrapped async hops → parental edge
+```
+
+Attach **exactly once** per process — attaching twice doubles every span
+and every frame push. Dive's `clear()` wipes subscribers, so re-attach
+after calling it (tests do this in `beforeEach`). Each provider accepts a
+`Tracer` of your own (`new MnemonicaOtelProvider(myTracer)`); by default
+they share `trace.getTracer('@mnemonica/otel')`.
+
+From here `otel` and `asyncFlow` are the deps the request-scope recipes
+below pass around.
 
 ## Use it from your own boundary
 
