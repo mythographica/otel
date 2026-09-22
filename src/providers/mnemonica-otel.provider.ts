@@ -9,6 +9,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import type { Tracer, Span } from '@opentelemetry/api';
 import { trace, context as otelContext } from '@opentelemetry/api';
 import type { hooksOpts, TypesCollection } from 'mnemonica/module';
+import { getProps } from 'mnemonica/module';
 
 const SymbolParentSpan = Symbol.for('mnemonica.span.parent');
 const asyncStorage = new AsyncLocalStorage<Span>();
@@ -131,6 +132,19 @@ export class MnemonicaOtelProvider {
 			const span = (current as Record<symbol, unknown>)[SymbolParentSpan] as Span | undefined;
 			if (span) {
 				return span;
+			}
+			// An ancestor whose constructor is still running (the child is
+			// built inside it, e.g. `this.kid = new this.Kid()`, sync or after
+			// an await) carries no span yet — that lands at its postCreation.
+			// Its span is pending, keyed on its args array, which core also
+			// exposes as the instance's __args__: same reference, so the
+			// lookup follows lineage exactly, never timing.
+			const args = (getProps(current) as { __args__?: unknown } | undefined)?.__args__;
+			if (args && typeof args === 'object') {
+				const pending = this.pendingSpans.get(args);
+				if (pending) {
+					return pending;
+				}
 			}
 			current = Object.getPrototypeOf(current);
 		}

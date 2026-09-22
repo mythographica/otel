@@ -30,7 +30,7 @@ for one framework, it belongs in that framework's adapter repo.
 | Path | Role |
 |---|---|
 | `src/hooks/attach-hooks.ts` | wires a TypesCollection to dive's lifecycle tracing — the only place that knows mnemonica's hook contract |
-| `src/providers/mnemonica-otel.provider.ts` | OTel spans for constructions; pending spans keyed on the per-call args array; parent found via own ALS then the prototype chain |
+| `src/providers/mnemonica-otel.provider.ts` | OTel spans for constructions; pending spans keyed on the per-call args array; parent found via own ALS then the prototype chain — an ancestor still under construction is matched through its `__args__` (the same array), so constructions made inside a constructor nest under it |
 | `src/providers/dive-otel.provider.ts` | OTel spans over dive's edge hooks — spans every wrapped call, parented on dive's trace; publishes edgeId→traceId on bounded `globalThis.__mnemonicaDiveTraceIds` for the strategy push channel |
 | `src/providers/async-flow.provider.ts` | ALS backbone: FlowFrame linked list — enter pushes, leave restores; unwrapped async hops inherit the parental frame; root pinSet holds context instances for the scope's lifetime |
 | `src/request-scope.ts` | `runInRequestScope` — one OTel span per HTTP request + triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
@@ -67,7 +67,7 @@ for one framework, it belongs in that framework's adapter repo.
 
 ```bash
 npm run build   # tsc → build/ (ESM) + build-cjs/ (CJS, tsconfig.cjs.json)
-npm test        # vitest run (52 tests, incl. the CJS smoke)
+npm test        # vitest run (54 tests, incl. the CJS smoke)
 ```
 
 Both must be green before a change is done. `prepublishOnly` runs build +

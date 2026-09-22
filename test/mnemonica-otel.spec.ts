@@ -69,6 +69,64 @@ describe('MnemonicaOtelProvider', () => {
 		expect(childSpan!.parentSpanId).toBe(parentSpan!.spanContext().spanId);
 	});
 
+	it('nests a construction made inside a parent constructor under the parent span', async () => {
+		const tracer = provider.getTracer('test');
+		const otel = new MnemonicaOtelProvider(tracer);
+		const collection: TypesCollection = createTypesCollection();
+
+		otel.attachHooks(collection);
+
+		// the parent's span is still pending while its own constructor runs:
+		// it lands on the instance only at postCreation
+		const Parent = collection.define('Parent', function (this: { kid: unknown; Kid: new () => unknown }) {
+			this.kid = new this.Kid();
+		});
+		Parent.define('Kid', function () {});
+		new Parent();
+
+		await provider.forceFlush();
+
+		const spans = exporter.getFinishedSpans();
+		const parentSpan = spans.find((s) => s.name === 'mnemonica.Parent');
+		const kidSpan = spans.find((s) => s.name === 'mnemonica.Kid');
+		expect(spans.length).toBe(2);
+		expect(kidSpan!.parentSpanId).toBe(parentSpan!.spanContext().spanId);
+		expect(kidSpan!.spanContext().traceId).toBe(parentSpan!.spanContext().traceId);
+	});
+
+	it('nests a construction made after an await inside an async parent constructor', async () => {
+		const tracer = provider.getTracer('test');
+		const otel = new MnemonicaOtelProvider(tracer);
+		const collection: TypesCollection = createTypesCollection();
+
+		otel.attachHooks(collection);
+
+		const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+		const Parent = collection.define('Parent', async function (this: { kid: unknown; Kid: new () => unknown }) {
+			await sleep(5);
+			this.kid = new this.Kid();
+			return this;
+		});
+		Parent.define('Kid', function () {});
+		// an unrelated root constructed while the parent is still pending
+		// must NOT be adopted by it — the lookup is by lineage, not by time
+		const Other = collection.define('Other', function () {});
+
+		const pending = new Parent();
+		new Other();
+		await pending;
+
+		await provider.forceFlush();
+
+		const spans = exporter.getFinishedSpans();
+		const parentSpan = spans.find((s) => s.name === 'mnemonica.Parent');
+		const kidSpan = spans.find((s) => s.name === 'mnemonica.Kid');
+		const otherSpan = spans.find((s) => s.name === 'mnemonica.Other');
+		expect(kidSpan!.parentSpanId).toBe(parentSpan!.spanContext().spanId);
+		expect(otherSpan!.parentSpanId).toBeUndefined();
+	});
+
 	it('records exception on creationError', async () => {
 		const tracer = provider.getTracer('test');
 		const otel = new MnemonicaOtelProvider(tracer);
