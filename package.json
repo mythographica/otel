@@ -1,6 +1,6 @@
 {
 	"name": "@mnemonica/otel",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "Framework-free Node.js core of the mnemonica observability stack — dive hook wiring, OpenTelemetry providers, ALS async-flow tracking, thunderstruck pre-root forensics, unblind error reports",
 	"type": "module",
 	"main": "./build/index.js",

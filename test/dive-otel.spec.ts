@@ -224,3 +224,36 @@ describe('DiveOtelProvider', () => {
 		expect(exporter.getFinishedSpans().length).toBe(1);
 	});
 });
+
+describe('DiveOtelProvider — retention follows dive', () => {
+	let exporter: InMemorySpanExporter;
+	let tracerProvider: NodeTracerProvider;
+
+	beforeEach(() => {
+		clear();
+		exporter = new InMemorySpanExporter();
+		tracerProvider = new NodeTracerProvider();
+		tracerProvider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+		tracerProvider.register();
+		new DiveOtelProvider(tracerProvider.getTracer('test')).attach();
+	});
+
+	it('keeps the true root edge id past 20000 unrelated edges', async () => {
+		const ctx = { name: 'ctx' };
+		const leaf = wrap(function leafCall () { return 1; }, ctx);
+		const mid = wrap(function midCall () {
+			for (let i = 0; i < 20005; i++) {
+				recordCreation('Noise', { i });
+			}
+			return leaf();
+		}, ctx);
+		const root = wrap(function rootCall () { return mid(); }, ctx);
+		root();
+		await tracerProvider.forceFlush();
+
+		const spans = exporter.getFinishedSpans();
+		const rootSpan = spans.find((s) => s.name === 'dive.call:rootCall');
+		const leafSpan = spans.find((s) => s.name === 'dive.call:leafCall');
+		expect(leafSpan!.attributes['dive.root_edge_id']).toBe(rootSpan!.attributes['dive.edge_id']);
+	});
+});

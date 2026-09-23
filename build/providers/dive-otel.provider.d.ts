@@ -22,7 +22,8 @@ export declare class DiveOtelProvider {
     private tracer;
     private spans;
     private edgeParents;
-    private static readonly EDGE_PARENTS_LIMIT;
+    private edgeRefs;
+    private released;
     private detachers;
     constructor(tracer?: Tracer);
     /**
@@ -38,6 +39,7 @@ export declare class DiveOtelProvider {
     private onCreate;
     private findParentSpan;
     private closeSpan;
+    private track;
     /**
      * Cross-surface attributes every span gets, on every hook path:
      * the edge's trace root id (Jaeger link → mnemographica's Live Trace,

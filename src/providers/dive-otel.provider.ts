@@ -70,10 +70,23 @@ export class DiveOtelProvider {
 	private spans = new Map<number, Span>();
 	// edge id → parentId, for the root-edge walk (dive.root_edge_id span
 	// attribute). Never drained mid-flight: a completed edge can still
-	// parent later children (a create edge adopts the next wrapped call),
-	// so the map is bounded coarsely instead.
+	// parent later children (a create edge adopts the next wrapped call).
 	private edgeParents = new Map<number, number | null>();
-	private static readonly EDGE_PARENTS_LIMIT = 20000;
+	// Per-edge memory lives exactly as long as dive retains the edge — no
+	// count. dive hands the hooks the very edge objects its ring holds; when
+	// the ring lets one go (setTraceLimit eviction, clear()) and it is
+	// collected, its entry is released. The WeakRef guards id reuse:
+	// dive's clear() restarts ids at 1, so an id may already name a newer,
+	// live edge when an old edge's release arrives — that entry stays.
+	private edgeRefs = new Map<number, WeakRef<FlowEdge>>();
+	private released = new FinalizationRegistry<number>((edgeId) => {
+		const ref = this.edgeRefs.get(edgeId);
+		if (ref && ref.deref() !== undefined) {
+			return;
+		}
+		this.edgeRefs.delete(edgeId);
+		this.edgeParents.delete(edgeId);
+	});
 	private detachers: Array<() => void> = [];
 
 	constructor (tracer?: Tracer) {
@@ -245,6 +258,16 @@ export class DiveOtelProvider {
 		span.end();
 	}
 
+	// Register an edge for release once, the first time the provider sees it.
+	private track (edge: FlowEdge): void {
+		const known = this.edgeRefs.get(edge.id);
+		if (known && known.deref() === edge) {
+			return;
+		}
+		this.edgeRefs.set(edge.id, new WeakRef(edge));
+		this.released.register(edge, edge.id);
+	}
+
 	/**
 	 * Cross-surface attributes every span gets, on every hook path:
 	 * the edge's trace root id (Jaeger link → mnemographica's Live Trace,
@@ -272,9 +295,7 @@ export class DiveOtelProvider {
 	// complete for anything still in flight; an evicted/unknown parent
 	// simply ends the walk at the deepest known id.
 	private rootEdgeIdOf (edge: FlowEdge): number {
-		if (this.edgeParents.size >= DiveOtelProvider.EDGE_PARENTS_LIMIT) {
-			this.edgeParents.clear();
-		}
+		this.track(edge);
 		this.edgeParents.set(edge.id, edge.parentId);
 		let id = edge.id;
 		let parent = edge.parentId;
