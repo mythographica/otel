@@ -30,8 +30,8 @@ npm install @mnemonica/otel mnemonica @mnemonica/dive @opentelemetry/api
 ```
 
 `mnemonica`, `@mnemonica/dive` and `@opentelemetry/api` are peer
-dependencies — they are process singletons (the type registry, the edge
-ring, the OTel API), so the app must own exactly one copy of each.
+dependencies — they are process singletons (the type registry, the trace,
+the OTel API), so the app must own exactly one copy of each.
 
 Dual build: ESM (`import`) and CommonJS (`require`) both work. With
 `@mnemonica/dive` ≥ 0.9.0 the `require()` chain is plain CJS end-to-end
@@ -85,8 +85,8 @@ HTTP POST /users                  ← request span (runInRequestScope)
   `mnemonica.caught-exception` span plus the `[unblind]` stdout marker.
 - **Dive edges join OTel traces.** `DiveOtelProvider` publishes
   edgeId → traceId pairs on a bounded `globalThis.__mnemonicaDiveTraceIds`
-  map, so an external trace consumer reading dive's edge ring can jump from
-  any edge to the exact backend trace it belongs to.
+  map, so an external trace consumer reading dive's live edges can jump
+  from any edge to the exact backend trace it belongs to.
 
 ## Wire it up
 
@@ -186,7 +186,3 @@ asyncFlow.runInScope(() => consume(message));  // root frame per job
 
 The contributor contract — file map, invariants, the testing gate — lives
 in [`AGENTS.md`](./AGENTS.md).
-
-## License
-
-MIT

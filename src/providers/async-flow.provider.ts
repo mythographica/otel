@@ -1,7 +1,7 @@
 /**
  * Async-flow provider — the ALS backbone for dive attribution.
  *
- * Design: reports/async-flow-tracking-design.md (2026-09-02).
+ * Design: reports/async-flow-tracking-design.md.
  *
  * One AsyncLocalStorage carrying a linked list of FlowFrames. The root
  * frame is created per HTTP request by MnemonicaTraceMiddleware (or

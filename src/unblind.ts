@@ -1,5 +1,5 @@
 /**
- * The Unblinder core (2026-09-03, Viktor) — framework-free error-boundary
+ * The Unblinder core — framework-free error-boundary
  * reporting: build the report from dive's trace + core's getProps, then
  * record the telemetry. The framework wrapper owns the body discipline
  * (status code, the headers-sent check, expected-client-error passthrough);
@@ -40,7 +40,7 @@ export function extractSafe (instance: object): unknown {
 /**
  * The attempted constructor args of a FAILED mnemonica construction ride
  * the errored instance itself: the caught object IS the errored shell
- * (probed 2026-09-03: caught === creationError's inheritedInstance,
+ * (probed: caught === creationError's inheritedInstance,
  * instanceof Error via the spliced prototype chain), and core's own
  * getProps exposes { args, originalError, … } off the props WeakMap.
  * Plain errors yield undefined; anything unexpected degrades, never
@@ -83,7 +83,7 @@ export function buildUnblindReport (error: unknown): UnblindReport {
 	const message = isError ? error.message : `non-Error thrown (${typeof error})`;
 	const flow = isError ? getFlow(error as Error) : [];
 	// The errored create edge attributes the construction's PARENT
-	// instance (probed 2026-09-03: edge.instance === existentInstance).
+	// instance (probed: edge.instance === existentInstance).
 	// The attempted constructor ARGS ride the caught error itself — it
 	// IS the errored shell, and getProps exposes its args (see
 	// erroredArgsSafe above).

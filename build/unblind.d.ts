@@ -14,7 +14,7 @@ export declare function extractSafe(instance: object): unknown;
 /**
  * The attempted constructor args of a FAILED mnemonica construction ride
  * the errored instance itself: the caught object IS the errored shell
- * (probed 2026-09-03: caught === creationError's inheritedInstance,
+ * (probed: caught === creationError's inheritedInstance,
  * instanceof Error via the spliced prototype chain), and core's own
  * getProps exposes { args, originalError, … } off the props WeakMap.
  * Plain errors yield undefined; anything unexpected degrades, never

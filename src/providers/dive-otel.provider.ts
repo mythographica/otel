@@ -31,10 +31,10 @@ import {
 
 // Call/method/construct edges carry their callsite as `name`
 // (`/abs/file.ts:line:col`, 1-based) — surfaced as OTEL semconv code.*
-// attributes so Jaeger can link straight to the source (Wanted #4).
+// attributes so Jaeger can link straight to the source.
 const CALLSITE_RE = /^(.*):(\d+):(\d+)$/;
 
-// Wanted #2 (2026-09-01): the strategy push channel (an injected script,
+// The strategy push channel (an injected script,
 // see strategy/cdp-scripts/ws-server.js) cannot see OTEL spans, so the
 // adapter publishes edgeId → traceId on a bounded global map; the push
 // mapper forwards it and mnemographica's Live Trace gains the "Open in
@@ -73,11 +73,12 @@ export class DiveOtelProvider {
 	// parent later children (a create edge adopts the next wrapped call).
 	private edgeParents = new Map<number, number | null>();
 	// Per-edge memory lives exactly as long as dive retains the edge — no
-	// count. dive hands the hooks the very edge objects its ring holds; when
-	// the ring lets one go (setTraceLimit eviction, clear()) and it is
-	// collected, its entry is released. The WeakRef guards id reuse:
-	// dive's clear() restarts ids at 1, so an id may already name a newer,
-	// live edge when an old edge's release arrives — that entry stays.
+	// count. dive hands the hooks the very edge objects its object graph
+	// holds; when one becomes unreachable (settled, unpinned, no live child
+	// — or clear()) and is collected, its entry is released. The WeakRef
+	// guards id reuse: dive's clear() restarts ids at 1, so an id may
+	// already name a newer, live edge when an old edge's release arrives —
+	// that entry stays.
 	private edgeRefs = new Map<number, WeakRef<FlowEdge>>();
 	private released = new FinalizationRegistry<number>((edgeId) => {
 		const ref = this.edgeRefs.get(edgeId);
@@ -270,10 +271,9 @@ export class DiveOtelProvider {
 
 	/**
 	 * Cross-surface attributes every span gets, on every hook path:
-	 * the edge's trace root id (Jaeger link → mnemographica's Live Trace,
-	 * Wanted #1), the edgeId→traceId publication for the strategy push
-	 * channel (Wanted #2), and code.filepath/line/column parsed from the
-	 * callsite name (Wanted #4).
+	 * the edge's trace root id (Jaeger link → mnemographica's Live Trace),
+	 * the edgeId→traceId publication for the strategy push channel, and
+	 * code.filepath/line/column parsed from the callsite name.
 	 */
 	private decorateSpan (span: Span, edge: FlowEdge): void {
 		span.setAttribute('dive.root_edge_id', this.rootEdgeIdOf(edge));

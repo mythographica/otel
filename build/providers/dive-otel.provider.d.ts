@@ -42,10 +42,9 @@ export declare class DiveOtelProvider {
     private track;
     /**
      * Cross-surface attributes every span gets, on every hook path:
-     * the edge's trace root id (Jaeger link → mnemographica's Live Trace,
-     * Wanted #1), the edgeId→traceId publication for the strategy push
-     * channel (Wanted #2), and code.filepath/line/column parsed from the
-     * callsite name (Wanted #4).
+     * the edge's trace root id (Jaeger link → mnemographica's Live Trace),
+     * the edgeId→traceId publication for the strategy push channel, and
+     * code.filepath/line/column parsed from the callsite name.
      */
     private decorateSpan;
     private rootEdgeIdOf;

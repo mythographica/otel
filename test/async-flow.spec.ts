@@ -7,17 +7,18 @@
  * NOTE: dive.clear() wipes hook subscribers — every test re-attaches
  * after clearing (same pattern as dive-otel.spec.ts).
  *
- * Lookup note: edges are found by context identity (copies share the
- * instance getter), not by name — call edges may be named by callsite.
+ * Lookup note: getFlow(ctx) returns ctx's chain (copies) — its LAST edge is
+ * ctx's latest. Identity, not name, locates the edge: call edges may be
+ * named by callsite.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { wrap, clear, getTrace } from '@mnemonica/dive';
-import type { FlowEdge } from '@mnemonica/dive';
+import { wrap, clear, getFlow } from '@mnemonica/dive';
 import { AsyncFlowProvider } from '../src/providers/async-flow.provider.js';
 import type { CrashContext } from '../src/providers/async-flow.provider.js';
 
 function edgeIdOf (ctx: object): number {
-	const edge = getTrace().find((item: FlowEdge) => item.instance === ctx);
+	const flow = getFlow(ctx);
+	const edge = flow[flow.length - 1];
 	if (!edge) {
 		throw new Error('no edge for context');
 	}

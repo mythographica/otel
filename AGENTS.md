@@ -58,7 +58,7 @@ for one framework, it belongs in that framework's adapter repo.
    and the `[unblind]` stdout marker are pinned downstream (runbooks grep
    the marker; framework adapters pin the report shape). Keep them stable.
 5. **Peers are process singletons.** `mnemonica` (type registry),
-   `@mnemonica/dive` (edge ring) and `@opentelemetry/api` must each exist
+   `@mnemonica/dive` (the trace) and `@opentelemetry/api` must each exist
    exactly once in the consumer's process. Never move them into
    `dependencies` here (dive's dual listing mirrors the historical adapter
    layout and is the deliberate exception).
