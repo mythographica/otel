@@ -21,6 +21,10 @@ Framework wiring is layered on top, never inside: frameworks with their
 own DI container, pipes, interceptors and decorator lifecycles get a
 dedicated first-party adapter package in the `@mnemonica` org — that
 wiring is genuinely complicated and must be packaged and tested as such.
+**NestJS is the first of these: use
+[`@mnemonica/nestjs`](https://www.npmjs.com/package/@mnemonica/nestjs)
+(interceptor-level request boundary, DI-scoped context, `attachHooks` at
+module init) — do not wire this package by hand under NestJS.**
 For simple frameworks the recipes below are all you need.
 
 ## Install

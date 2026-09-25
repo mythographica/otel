@@ -5,18 +5,53 @@ codebase: what it is for, what to attach, and how to read the results.
 The full API reference is [`README.md`](./README.md); this file is the
 *how to think*.
 
-## What this package is for
+## What this package is for — the combo
 
-`@mnemonica/otel` is the Node.js boundary of the mnemonica observability
-stack. It connects two engines — **mnemonica** (instance inheritance) and
-**@mnemonica/dive** (execution-flow tracing) — and exports the result as
-**OpenTelemetry** spans. It adds no framework semantics and runs in
-Express, Fastify, raw `http`, queue consumers, and CLIs unchanged.
+`@mnemonica/otel` is the third leg of a three-part stack; used properly,
+all three work together:
 
-Wrap placement, the context rule, and where traces end by design are
-**dive's** domain — read
-[`@mnemonica/dive`'s SKILL.md](https://www.npmjs.com/package/@mnemonica/dive)
-for those. This file only covers what otel adds on top.
+- **mnemonica** — model the data: instance inheritance, lineage carried
+  in the prototype chain. Types, subtypes, construction hooks.
+- **@mnemonica/dive** — flow over those objects: wrap boundaries, record
+  edges, pin errors to their data.
+- **@mnemonica/otel** — this package: wire the two together
+  (`attachHooks`) and export the result as OpenTelemetry spans.
+
+The other two legs have their own agent guides —
+[mnemonica's SKILL.md](https://www.npmjs.com/package/mnemonica) (modeling
+the data as lineage) and
+[@mnemonica/dive's SKILL.md](https://www.npmjs.com/package/@mnemonica/dive)
+(wrap placement, the context rule, where traces end by design). Read all
+three; this file only covers what otel adds on top.
+
+One startup example, all three together:
+
+```typescript
+import { defaultTypes } from 'mnemonica';
+import { wrap } from '@mnemonica/dive';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { attachHooks, DiveOtelProvider } from '@mnemonica/otel';
+
+const sdk = new NodeTracerProvider();
+sdk.register();
+
+// 1. model the data (mnemonica)
+const User = defaultTypes.define('User', function (this: { id: string }, d: { id: string }) {
+	this.id = d.id;
+});
+
+// 2. wire + export (otel)
+attachHooks(defaultTypes);          // mnemonica lifecycle → dive edges
+const diveOtel = new DiveOtelProvider();
+diveOtel.attach();                  // dive edges → OTel spans
+
+// 3. flow over the objects (dive)
+const user = new User({ id: 'u1' });
+const load = wrap(function load () {
+	return user.id;
+}, user);
+load();
+```
 
 ## The one-time wiring
 
@@ -40,8 +75,9 @@ asyncFlow.attach();               // unwrapped async hops → parental edge
   `wrap()` calls are traced.
 - Attaching twice doubles every span and every frame push — guard the
   startup path.
-- Dive's `clear()` wipes subscribers; re-attach after calling it (tests
-  do this in `beforeEach`).
+- `dive.clear()` is a test-only reset and it also detaches every
+  provider: in your test setup, re-attach after each `clear()`. App code
+  never calls it.
 - Each provider accepts your own `Tracer`
   (`new DiveOtelProvider(myTracer)`); by default they share
   `trace.getTracer('@mnemonica/otel')`.
@@ -90,10 +126,13 @@ recordUnblindTelemetry(report, error);      // span + [unblind] stdout line
 - **Express / Fastify / raw `http`**: the README recipes — middleware or
   `onRequest` hook calling `feedPreRootFromRequest` then
   `runInRequestScope` — are all you need.
-- **NestJS (or any framework with its own DI/pipes/interceptors)**: use
-  the first-party adapter `@mnemonica/nestjs`
-  (`MnemonicaModule.forRoot({ thunderstruck: true })`) — that wiring is
-  genuinely complicated and is packaged and tested as such.
+- **NestJS**: it has its own dedicated package built over otel —
+  `@mnemonica/nestjs` (interceptor-level request boundary, DI-scoped
+  context, `attachHooks` at module init). Use it; do NOT wire otel by
+  hand under NestJS.
+- **Any framework with its own DI/pipes/interceptors/decorators**: same
+  pattern — a first-party adapter package in the `@mnemonica` org; the
+  hand-rolled recipes below are for simple frameworks only.
 - **Queues / CLI / tests**: no request boundary — open an explicit scope
   per job with `asyncFlow.runInScope(() => consume(message))`.
 

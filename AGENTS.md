@@ -23,7 +23,10 @@ never import `async_hooks`; ALS lives here.
 **Hard rule: no framework vocabulary in this package.** Source, comments
 and docs must not name any specific web framework's adapter package or
 reference framework-specific lifecycles. If a sentence only makes sense
-for one framework, it belongs in that framework's adapter repo.
+for one framework, it belongs in that framework's adapter repo. One
+exception: our own ecosystem's observability helper packages
+(e.g. `@mnemonica/nestjs`) may be NAMED, only to point users at that
+package — no other framework vocabulary, no framework lifecycles.
 
 ## File map
 
