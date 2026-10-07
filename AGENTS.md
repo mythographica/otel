@@ -36,9 +36,8 @@ package — no other framework vocabulary, no framework lifecycles.
 | `src/providers/mnemonica-otel.provider.ts` | OTel spans for constructions; pending spans keyed on the per-call args array; parent found via own ALS then the prototype chain — an ancestor still under construction is matched through its `__args__` (the same array), so constructions made inside a constructor nest under it |
 | `src/providers/dive-otel.provider.ts` | OTel spans over dive's edge hooks — spans every wrapped call, parented on dive's trace; per-edge parent map released by a `FinalizationRegistry` on dive's edge objects; publishes edgeId→traceId on bounded `globalThis.__mnemonicaDiveTraceIds` for the strategy push channel |
 | `src/providers/async-flow.provider.ts` | ALS backbone: FlowFrame linked list — enter pushes, leave restores; unwrapped async hops inherit the parental frame; root pinSet holds context instances for the scope's lifetime |
-| `src/request-scope.ts` | `runInRequestScope` — one OTel span per HTTP request + triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
-| `src/thunderstruck/pre-root.ts` | the pre-root store: WeakMap-keyed on request payload objects |
-| `src/thunderstruck/feed-from-request.ts` | `feedPreRootFromRequest` — boundary shaping for any framework's request |
+| `src/entry-scope.ts` | `runInEntryScope` — one OTel root span per unit of work + triple scope entry (provider ALS, OTEL global context, async-flow root frame); framework wiring is README recipes on top |
+| `src/thunderstruck/pre-root.ts` | the pre-root store: WeakMap-keyed on request payload objects; the neutral `feedPreRoot(raw)` boundary feed |
 | `src/unblind.ts` | `buildUnblindReport` / `recordUnblindTelemetry` — the Unblinder core (framework wrappers own the body discipline) |
 | `src/utils/is-mnemonica-instance.ts` | realm-safe type guard via `getProps()` |
 | `src/utils/dive-flow.ts` | `formatFlow` / `errorContext` — read-side helpers over dive's trace |
@@ -75,7 +74,7 @@ package — no other framework vocabulary, no framework lifecycles.
 
 ```bash
 npm run build   # tsc → build/ (ESM) + build-cjs/ (CJS, tsconfig.cjs.json)
-npm test        # vitest run (54 tests, incl. the CJS smoke)
+npm test        # vitest run (58 tests, incl. the CJS smoke)
 ```
 
 Both must be green before a change is done. `prepublishOnly` runs build +
@@ -115,7 +114,7 @@ remove the guard.
 
 This is the engine room between `mnemonica` + `@mnemonica/dive` and the
 framework adapter packages. Framework adapters are thin wrappers over
-`runInRequestScope` / `feedPreRootFromRequest` / `buildUnblindReport` for
+`runInEntryScope` / `feedPreRoot` / `buildUnblindReport` for
 simple frameworks (Express/Fastify — a few lines, recipe in the README),
 and full packages for frameworks with their own DI/pipe/decorator
 lifecycles. Changes to mnemonica's construction semantics or dive's trace

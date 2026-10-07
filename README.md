@@ -51,19 +51,19 @@ Node ≥ 20.19 / 22.
 | `MnemonicaOtelProvider` | OTel spans for mnemonica constructions (pre/post/error), parented by lineage, ALS-propagated |
 | `DiveOtelProvider` | OTel spans for EVERY dive-wrapped call, parented on dive's own trace; async spans close at settle |
 | `AsyncFlowProvider` | the ALS backbone: attributes UNWRAPPED async hops (timers, promise continuations, generator suspensions) to the parental dive edge; pins context instances for the scope's lifetime |
-| `runInRequestScope(req, res, deps, fn)` | one OTel span per HTTP request + the triple async scope (provider ALS, OTEL global context, async-flow root frame) |
+| `runInEntryScope(entry, deps, fn)` | one root span per unit of work (request, message, command) + the triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
 | `feedPreRoot` / `feedValidatedPreRoot` / `getPreRoot` | thunderstruck pre-root store: request payloads correlated by OBJECT IDENTITY (WeakMap), retention = the request's lifetime |
-| `feedPreRootFromRequest(req, opts?)` | the boundary helper: shapes any framework's request into the pre-root feed |
 | `buildUnblindReport(error)` / `recordUnblindTelemetry(report, error)` | the Unblinder core: the dive branch + errored construction + attempted args, plus the unconditional span and stdout marker |
 | `isMnemonicaInstance(value)` | realm-safe type guard via `getProps()` |
 | `formatFlow(target?)` / `errorContext(error)` | read-side helpers over dive's trace |
 
 ## What you get in your traces
 
-With the wiring below, one HTTP request produces ONE coherent trace:
+With the wiring below, one entry — an HTTP request, a queue message, a CLI
+command — produces ONE coherent trace:
 
 ```
-HTTP POST /users                  ← request span (runInRequestScope)
+HTTP POST /users                  ← entry span (runInEntryScope)
 ├─ mnemonica.UserEntity           ← construction span (MnemonicaOtelProvider)
 │  └─ mnemonica.UserResponse      ←   parented on the prototype lineage
 ├─ UserService.createUser         ← call span (DiveOtelProvider)
@@ -136,19 +136,47 @@ after calling it (tests do this in `beforeEach`). Each provider accepts a
 `Tracer` of your own (`new MnemonicaOtelProvider(myTracer)`); by default
 they share `trace.getTracer('@mnemonica/otel')`.
 
-From here `otel` and `asyncFlow` are the deps the request-scope recipes
-below pass around.
+From here `otel` and `asyncFlow` are the deps the entry-scope recipes below
+pass around.
 
 ## Use it from your own boundary
+
+Every entrypoint is a few lines of wiring over the neutral
+`runInEntryScope(entry, deps, fn)` — one root span per unit of work,
+current in both the mnemonica provider's store and the OTel global
+context, with the async-flow root frame outermost when given. With
+`endOnReturn: false` the caller owns the ending — and the error
+recording: a throw inside `fn` still sets the span's error status and
+records the exception, but the span is left open for the caller to end
+(record and end it in the same `finish`/error handler). Return a native
+promise (an async function) from `fn` if the span should cover the async
+work — non-native thenables are treated as plain values, never awaited.
+Recipes:
 
 ### Express
 
 ```typescript
-import { runInRequestScope, feedPreRootFromRequest } from '@mnemonica/otel';
+import { runInEntryScope, feedPreRoot } from '@mnemonica/otel';
 
 app.use((req, res, next) => {
-  feedPreRootFromRequest(req);                 // thunderstruck boundary
-  runInRequestScope(req, res, { tracer, otel, asyncFlow }, () => next());
+  feedPreRoot({                                   // thunderstruck boundary
+    params  : req.params,
+    query   : req.query,
+    body    : req.body,
+    headers : req.headers,
+    request : req,
+  });
+  runInEntryScope(
+    { name: `HTTP ${req.method} ${req.route?.path ?? req.url}`, endOnReturn: false },
+    { tracer, otel, asyncFlow },
+    (span) => {
+      res.on('finish', () => {
+        span.setAttribute('http.status_code', res.statusCode);
+        span.end();                               // caller owns the ending
+      });
+      next();
+    },
+  );
 });
 ```
 
@@ -156,9 +184,61 @@ app.use((req, res, next) => {
 
 ```typescript
 fastify.addHook('onRequest', (request, reply, done) => {
-  feedPreRootFromRequest(request);             // params/query/body/headers
-  runInRequestScope(request.raw, reply.raw, { tracer, otel, asyncFlow }, () => done());
+  feedPreRoot({
+    params  : request.params,
+    query   : request.query,
+    body    : request.body,
+    headers : request.headers,
+    request : request.raw,
+  });
+  runInEntryScope(
+    { name: `HTTP ${request.method} ${request.url}`, endOnReturn: false },
+    { tracer, otel, asyncFlow },
+    (span) => {
+      reply.raw.on('finish', () => span.end());
+      done();
+    },
+  );
 });
+```
+
+### Raw node http
+
+```typescript
+import { runInEntryScope } from '@mnemonica/otel';
+
+const server = http.createServer((req, res) => {
+  runInEntryScope(
+    { name: `HTTP ${req.method} ${req.url}`, endOnReturn: false },
+    { tracer, otel, asyncFlow },
+    (span) => {
+      res.on('finish', () => span.end());         // end with the response
+      route(req, res);
+    },
+  );
+});
+```
+
+### Queue message handler
+
+```typescript
+channel.consume(queue, (message) => {
+  runInEntryScope(
+    { name: `queue ${queue}`, attributes: { 'messaging.destination': queue } },
+    { tracer, otel, asyncFlow },
+    () => handle(message),   // ends when the returned promise settles
+  );
+});
+```
+
+### CLI command
+
+```typescript
+runInEntryScope(
+  { name: `cli ${command}`, attributes: { 'process.command': process.argv.join(' ') } },
+  { tracer, otel, asyncFlow },
+  () => run(command),
+).then((code) => process.exit(code));
 ```
 
 ### Error boundary (any framework)
@@ -176,7 +256,7 @@ if (!res.headersSent) res.status(500).json(report);
 (`'mnemonica.caught-exception'`) and the `[unblind]` stdout marker are
 pinned by downstream consumers — keep them stable.
 
-### Non-HTTP scopes (queues, CLI, tests)
+### Bare scopes (tests, manual frames)
 
 ```typescript
 import { AsyncFlowProvider } from '@mnemonica/otel';

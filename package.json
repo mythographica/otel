@@ -20,7 +20,7 @@
 		"LICENSE"
 	],
 	"scripts": {
-		"build": "tsc && tsc -p tsconfig.cjs.json && node scripts/write-cjs-marker.js",
+		"build": "node scripts/clean-build.js && tsc && tsc -p tsconfig.cjs.json && node scripts/write-cjs-marker.js",
 		"build:watch": "tsc --watch",
 		"test": "NODE_OPTIONS=--expose-gc vitest run",
 		"test:watch": "vitest",
@@ -50,8 +50,6 @@
 		"tracing",
 		"observability",
 		"async-local-storage",
-		"express",
-		"fastify",
 		"nodejs"
 	],
 	"author": "went.out@gmail.com",

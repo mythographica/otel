@@ -115,19 +115,12 @@ export class DiveOtelProvider {
 			registerHook('recontext', (payload) => {
 				this.onRecontext(payload);
 			}),
+			// dive 0.7 support is gone (peer range is ^0.10.1): the 'create'
+			// event exists since 0.8.0, subscribe directly
+			registerHook('create', (payload) => {
+				this.onCreate(payload);
+			}),
 		);
-		try {
-			this.detachers.push(
-				registerHook('create', (payload) => {
-					this.onCreate(payload);
-				}),
-			);
-		} catch {
-			// The 'create' event exists since dive 0.8.0; on 0.7.x registerHook
-			// throws on the unknown event. Skipping it there preserves exactly
-			// the pre-subscription behavior (constructions stay unspanned), so
-			// the widened ^0.7.0 || ^0.8.0 peer range stays honest.
-		}
 	}
 
 	detach (): void {

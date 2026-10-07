@@ -93,12 +93,13 @@ asyncFlow.attach();               // unwrapped async hops → parental edge
   continuations, generator suspensions) attributed to the parental dive
   edge. Needs an ALS context to work from: the request scope or an
   explicit `runInScope`.
-- `runInRequestScope(req, res, { tracer, otel, asyncFlow }, fn)` — one
-  OTel span per HTTP request plus the triple async scope; call it at your
-  framework's request boundary.
-- `feedPreRootFromRequest(req)` — the thunderstruck boundary: feeds the
-  request payloads (body/query/params/headers) into the pre-root store,
-  correlated by object identity.
+- `runInEntryScope(entry, deps, fn)` — one OTel root span per unit of work
+  (request, message, command) plus the triple async scope; call it at your
+  boundary, with framework-specific wiring a few lines on top (recipes in
+  the README).
+- `feedPreRoot(raw)` — the thunderstruck boundary: feeds the entry
+  payloads (body/query/params/headers) into the pre-root store,
+  correlated by object identity. Framework shaping is the recipe's job.
 
 ## Reading results in a crash handler
 
@@ -123,9 +124,10 @@ recordUnblindTelemetry(report, error);      // span + [unblind] stdout line
 
 ## Framework notes
 
-- **Express / Fastify / raw `http`**: the README recipes — middleware or
-  `onRequest` hook calling `feedPreRootFromRequest` then
-  `runInRequestScope` — are all you need.
+- **Express / Fastify / raw `http`**: the README recipes — middleware,
+  `onRequest` hook, or a wrapped listener calling `feedPreRoot` then
+  `runInEntryScope` with `endOnReturn: false` (the span ends on response
+  'finish') — are all you need.
 - **NestJS**: it has its own dedicated package built over otel —
   `@mnemonica/nestjs` (interceptor-level request boundary, DI-scoped
   context, `attachHooks` at module init). Use it; do NOT wire otel by

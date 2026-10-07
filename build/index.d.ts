@@ -11,7 +11,9 @@
  *   - MnemonicaOtelProvider — OTel spans for constructions
  *   - DiveOtelProvider — OTel spans for every dive-wrapped call
  *   - AsyncFlowProvider — ALS backbone attributing unwrapped async hops
- *   - runInRequestScope() — one request span + triple async scope
+ *   - runInEntryScope() — one root span per unit of work (request, message,
+ *     command) + the triple scope entry (provider ALS, OTEL global context,
+ *     async-flow root frame); framework wiring is README recipes on top
  *   - feedPreRoot()/feedValidatedPreRoot()/getPreRoot() — thunderstruck
  *     pre-root forensics store (identity-correlated, request-lifetime)
  *   - feedPreRootFromRequest() — boundary helper over any HTTP request
@@ -23,9 +25,8 @@ export { attachHooks } from './hooks/attach-hooks.js';
 export { MnemonicaOtelProvider } from './providers/mnemonica-otel.provider.js';
 export { DiveOtelProvider } from './providers/dive-otel.provider.js';
 export { AsyncFlowProvider, type FlowFrame, type CrashContext } from './providers/async-flow.provider.js';
-export { runInRequestScope, type HttpRequestLike, type HttpResponseLike, type RequestScopeDeps } from './request-scope.js';
+export { runInEntryScope, type EntryDefinition, type EntryScopeDeps } from './entry-scope.js';
 export { feedPreRoot, feedValidatedPreRoot, getPreRoot, type RawPreRootPayload, type PreRootRecord, type PreRootData, } from './thunderstruck/pre-root.js';
-export { feedPreRootFromRequest, type RequestLike, type FeedPreRootOptions } from './thunderstruck/feed-from-request.js';
 export { buildUnblindReport, recordUnblindTelemetry, extractSafe, erroredArgsSafe, stringifySafe, type UnblindReport, } from './unblind.js';
 export { isMnemonicaInstance } from './utils/is-mnemonica-instance.js';
 export { formatFlow, errorContext, type FormattedFlowEdge } from './utils/dive-flow.js';

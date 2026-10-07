@@ -12,7 +12,6 @@ import {
 	feedValidatedPreRoot,
 	getPreRoot,
 } from '../src/thunderstruck/pre-root.js';
-import { feedPreRootFromRequest } from '../src/thunderstruck/feed-from-request.js';
 
 describe('pre-root store', () => {
 	it('correlates every stamped request part to the same payload', () => {
@@ -56,39 +55,5 @@ describe('pre-root store', () => {
 	it('feedValidatedPreRoot no-ops for unstamped objects and primitives', () => {
 		expect(() => feedValidatedPreRoot('primitive', {})).not.toThrow();
 		expect(() => feedValidatedPreRoot({ never: 'stamped' }, {})).not.toThrow();
-	});
-});
-
-describe('feedPreRootFromRequest', () => {
-	it('maps a structural request into the raw payload', () => {
-		const body = { a: 1 };
-		const req = {
-			method  : 'PUT',
-			url     : '/r',
-			params  : { id: '7' },
-			query   : {},
-			body,
-			headers : { h: 'v' },
-		};
-		feedPreRootFromRequest(req);
-
-		const raw = getPreRoot(body)?.raw as Record<string, unknown>;
-		expect(raw.method).toBe('PUT');
-		expect(raw.url).toBe('/r');
-		// storeRequest off (default): the request is neither linked nor stamped
-		expect(raw.request).toBeUndefined();
-		expect(getPreRoot(req)).toBeUndefined();
-	});
-
-	it('storeRequest links and stamps the request object', () => {
-		const body = { b: 2 };
-		const req = { method: 'GET', url: '/s', body };
-		feedPreRootFromRequest(req, { storeRequest: true });
-
-		const raw = getPreRoot(body)?.raw as Record<string, unknown>;
-		expect(raw.request).toBe(req);
-		// the request itself resolves — an error boundary holding only the
-		// request can still report WHICH data caused the failure
-		expect(getPreRoot(req)?.raw).toBe(raw);
 	});
 });
