@@ -26,11 +26,20 @@ import type {
 	DiveCreatePayload,
 	DiveEnterPayload,
 	DiveLeavePayload,
+	FlowEdge,
 } from '@mnemonica/dive';
 
 export type FlowFrame = {
 	/** the dive edge this frame belongs to (null on the root frame) */
 	edgeId   : number | null;
+	/**
+	 * the edge object from the enter payload — dive hands the LIVE edge, so
+	 * the frame keeps it (and, through dive's parent links, its ancestors)
+	 * alive as long as the scope's async work lives. That retention is what
+	 * makes crash-time frame attribution evidence, the same way a pending
+	 * timer keeps its branch.
+	 */
+	edge?    : FlowEdge;
 	/** the frame active when this one was entered */
 	parent   : FlowFrame | null;
 	/** strong pins of context instances — ONE set per scope, shared down
@@ -41,6 +50,9 @@ export type FlowFrame = {
 /** Read-only crash-time view of the active frame. */
 export type CrashContext = {
 	edgeId    : number | null;
+	/** the entering edge (the LIVE edge — strongly held by the frame, so
+	 *  alive whenever the frame is), when the frame belongs to an edge */
+	edge?     : FlowEdge;
 	instances : object[];
 };
 
@@ -116,6 +128,9 @@ export class AsyncFlowProvider {
 			edgeId    : frame.edgeId,
 			instances : [...frame.pinSet],
 		};
+		if (frame.edge !== undefined) {
+			result.edge = frame.edge;
+		}
 		return result;
 	}
 
@@ -126,6 +141,7 @@ export class AsyncFlowProvider {
 		}
 		const frame: FlowFrame = {
 			edgeId : edge.id,
+			edge,
 			parent : current,
 			pinSet : current.pinSet,
 		};

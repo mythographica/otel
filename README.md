@@ -5,7 +5,7 @@ The framework-free Node.js core of the mnemonica observability stack.
 This package is everything a framework adapter needs that has nothing to
 do with any framework: the dive hook wiring, the OpenTelemetry providers,
 the ALS async-flow backbone, the thunderstruck pre-root forensics store,
-and the Unblinder error reports — all against plain structural types, so
+and error analysis (error → its dive edge → its instances) — all against plain structural types, so
 they run in Express, Fastify, raw `http`, queue consumers, and CLIs
 unchanged.
 
@@ -53,7 +53,7 @@ Node ≥ 20.19 / 22.
 | `AsyncFlowProvider` | the ALS backbone: attributes UNWRAPPED async hops (timers, promise continuations, generator suspensions) to the parental dive edge; pins context instances for the scope's lifetime |
 | `runInEntryScope(entry, deps, fn)` | one root span per unit of work (request, message, command) + the triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
 | `feedPreRoot` / `feedValidatedPreRoot` / `getPreRoot` | thunderstruck pre-root store: request payloads correlated by OBJECT IDENTITY (WeakMap), retention = the request's lifetime |
-| `buildUnblindReport(error)` / `recordUnblindTelemetry(report, error)` | the Unblinder core: the dive branch + errored construction + attempted args, plus the unconditional span and stdout marker |
+| `captureError(error, deps?)` / `analyseError(capture, budget?)` / `recordErrorAnalysis(analysis, span)` | the error analysis: which dive edge the error came from (four sources, evidence-labelled), the chain's instances as one lineage graph (lethe format), recorded on a span the caller passes — data returned, never printed |
 | `isMnemonicaInstance(value)` | realm-safe type guard via `getProps()` |
 | `formatFlow(target?)` / `errorContext(error)` | read-side helpers over dive's trace |
 
@@ -68,7 +68,7 @@ HTTP POST /users                  ← entry span (runInEntryScope)
 │  └─ mnemonica.UserResponse      ←   parented on the prototype lineage
 ├─ UserService.createUser         ← call span (DiveOtelProvider)
 │  └─ …                           ←   async hops attributed (AsyncFlowProvider)
-└─ mnemonica.caught-exception     ← on failure only: the Unblinder span
+└─ mnemonica.error (event)        ← on failure only: the analysis, if recorded
 ```
 
 - **Construction spans follow the prototype chain.** `MnemonicaOtelProvider`
@@ -83,10 +83,12 @@ HTTP POST /users                  ← entry span (runInEntryScope)
 - **Unwrapped async hops are still attributed.** Timers, promise
   continuations and generator suspensions that nobody wrapped land under
   the parental dive edge via the `AsyncFlowProvider` ALS backbone.
-- **Errors arrive with their data.** A caught exception carries the dive
-  branch that led to it, the errored construction, and the attempted args —
-  `buildUnblindReport` shapes it, `recordUnblindTelemetry` emits the
-  `mnemonica.caught-exception` span plus the `[unblind]` stdout marker.
+- **Errors arrive with their data.** `captureError` + `analyseError` find
+  which dive edge an error came from — the error's own pin (evidence), the
+  ALS frame at crash time (evidence), or the rest residue (a labelled
+  guess) — and collect the chain's instances into one lineage graph.
+  Nothing is printed; `recordErrorAnalysis` puts the result on a span the
+  caller passes, as one `mnemonica.error` event.
 - **Dive edges join OTel traces.** `DiveOtelProvider` publishes
   edgeId → traceId pairs on a bounded `globalThis.__mnemonicaDiveTraceIds`
   map, so an external trace consumer reading dive's live edges can jump
@@ -244,17 +246,20 @@ runInEntryScope(
 ### Error boundary (any framework)
 
 ```typescript
-import { buildUnblindReport, recordUnblindTelemetry } from '@mnemonica/otel';
+import { captureError, analyseError, recordErrorAnalysis } from '@mnemonica/otel';
 
-// Express error middleware / Fastify setErrorHandler / process handler:
-const report = buildUnblindReport(error);      // branch + errored type + args
-recordUnblindTelemetry(report, error);         // span + [unblind] stdout line
-if (!res.headersSent) res.status(500).json(report);
+// Express error middleware / Fastify setErrorHandler / process handler —
+// at uncaughtException/unhandledRejection, capture synchronously, analyse
+// when asked, record on the span YOU pass; what gets logged is your call:
+const capture = captureError(error, { asyncFlow });   // references only
+const analysis = analyseError(capture);               // the edge + instances
+recordErrorAnalysis(analysis, span);                  // one mnemonica.error event
+if (!res.headersSent) res.status(500).json({ message: analysis.message });
 ```
 
-`report.kind` (`'caught-unblinded'`), the span name
-(`'mnemonica.caught-exception'`) and the `[unblind]` stdout marker are
-pinned by downstream consumers — keep them stable.
+`analysis.source` is `'error'` | `'async-frame'` | `'last-context'` |
+`'none'`, and `analysis.evidence` says whether the attribution is dive
+evidence or the labelled rest-residue guess.
 
 ### Bare scopes (tests, manual frames)
 

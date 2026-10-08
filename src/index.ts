@@ -16,8 +16,9 @@
  *     async-flow root frame); framework wiring is README recipes on top
  *   - feedPreRoot()/feedValidatedPreRoot()/getPreRoot() — thunderstruck
  *     pre-root forensics store (identity-correlated, request-lifetime)
- *   - feedPreRootFromRequest() — boundary helper over any HTTP request
- *   - buildUnblindReport()/recordUnblindTelemetry() — the Unblinder core
+ *   - captureError()/analyseError()/recordErrorAnalysis() — the error
+ *     analysis: error → its dive edge → its instances (data returned, never
+ *     printed); the lineage graph rides a span event the caller passes
  *   - isMnemonicaInstance() — realm-safe type guard
  *   - formatFlow()/errorContext() — read-side helpers over dive's trace
  */
@@ -36,12 +37,15 @@ export {
 	type PreRootData,
 } from './thunderstruck/pre-root.js';
 export {
-	buildUnblindReport,
-	recordUnblindTelemetry,
-	extractSafe,
-	erroredArgsSafe,
-	stringifySafe,
-	type UnblindReport,
-} from './unblind.js';
+	captureError,
+	analyseError,
+	recordErrorAnalysis,
+	type ErrorSource,
+	type ErrorAnalysis,
+	type ErrorCapture,
+	type ErrorAnalysisDeps,
+	type AnalysisBudget,
+	type AnalysedEdge,
+} from './error-analysis.js';
 export { isMnemonicaInstance } from './utils/is-mnemonica-instance.js';
 export { formatFlow, errorContext, type FormattedFlowEdge } from './utils/dive-flow.js';

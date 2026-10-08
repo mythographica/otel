@@ -38,7 +38,7 @@ package — no other framework vocabulary, no framework lifecycles.
 | `src/providers/async-flow.provider.ts` | ALS backbone: FlowFrame linked list — enter pushes, leave restores; unwrapped async hops inherit the parental frame; root pinSet holds context instances for the scope's lifetime |
 | `src/entry-scope.ts` | `runInEntryScope` — one OTel root span per unit of work + triple scope entry (provider ALS, OTEL global context, async-flow root frame); framework wiring is README recipes on top |
 | `src/thunderstruck/pre-root.ts` | the pre-root store: WeakMap-keyed on request payload objects; the neutral `feedPreRoot(raw)` boundary feed |
-| `src/unblind.ts` | `buildUnblindReport` / `recordUnblindTelemetry` — the Unblinder core (framework wrappers own the body discipline) |
+| `src/error-analysis.ts` | `captureError` / `analyseError` / `recordErrorAnalysis` — error → its dive edge → its instances; data returned, never printed; the lineage graph rides a span event the caller passes |
 | `src/utils/is-mnemonica-instance.ts` | realm-safe type guard via `getProps()` |
 | `src/utils/dive-flow.ts` | `formatFlow` / `errorContext` — read-side helpers over dive's trace |
 
@@ -55,10 +55,9 @@ package — no other framework vocabulary, no framework lifecycles.
    add manual cleanup APIs.
 3. **Headers are fed whole, on purpose** (correlation ids). Redaction is a
    planned separate task — do not silently strip fields.
-4. **The unblind names are a contract.** `report.kind`
-   (`'caught-unblinded'`), the span name (`'mnemonica.caught-exception'`)
-   and the `[unblind]` stdout marker are pinned downstream (runbooks grep
-   the marker; framework adapters pin the report shape). Keep them stable.
+4. **The package never writes to stdout or console.** Error analysis
+   RETURNS data (capture → analyse → record on a caller-passed span);
+   logging is the caller's visible choice. No marker, no hidden prints.
 5. **Peers are process singletons.** `mnemonica` (type registry),
    `@mnemonica/dive` (the trace) and `@opentelemetry/api` must each exist
    exactly once in the consumer's process. Never move them into
@@ -74,7 +73,7 @@ package — no other framework vocabulary, no framework lifecycles.
 
 ```bash
 npm run build   # tsc → build/ (ESM) + build-cjs/ (CJS, tsconfig.cjs.json)
-npm test        # vitest run (58 tests, incl. the CJS smoke)
+npm test        # vitest run (65 tests, incl. the CJS smoke + the child-process crash fixtures)
 ```
 
 Both must be green before a change is done. `prepublishOnly` runs build +
@@ -89,9 +88,9 @@ statuses, durations), not just the fields you touched.
 
 **OTel global registration in tests:** `NodeTracerProvider.register()` is
 a no-op after the first call per process — test files that exercise the
-GLOBAL tracer (`trace.getTracer`, e.g. `recordUnblindTelemetry`) must
-register once per file and `exporter.reset()` between tests; a second
-provider silently orphans its exporter (see `test/unblind.spec.ts`).
+GLOBAL tracer (`trace.getTracer`) must register once per file and
+`exporter.reset()` between tests; a second provider silently orphans its
+exporter (see `test/unblind.spec.ts`'s pattern in the git history).
 
 **CJS build notes:** `tsconfig.cjs.json` compiles the same src/ with
 `module: CommonJS` into `build-cjs/`; `scripts/write-cjs-marker.js` drops
@@ -114,7 +113,7 @@ remove the guard.
 
 This is the engine room between `mnemonica` + `@mnemonica/dive` and the
 framework adapter packages. Framework adapters are thin wrappers over
-`runInEntryScope` / `feedPreRoot` / `buildUnblindReport` for
+`runInEntryScope` / `feedPreRoot` / `captureError`+`analyseError` for
 simple frameworks (Express/Fastify — a few lines, recipe in the README),
 and full packages for frameworks with their own DI/pipe/decorator
 lifecycles. Changes to mnemonica's construction semantics or dive's trace

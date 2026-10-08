@@ -107,15 +107,18 @@ The reason the stack exists: when something fails, the error already
 carries its story.
 
 ```typescript
-import { buildUnblindReport, recordUnblindTelemetry } from '@mnemonica/otel';
+import { captureError, analyseError, recordErrorAnalysis } from '@mnemonica/otel';
 
-const report = buildUnblindReport(error);   // dive branch + errored type + args
-recordUnblindTelemetry(report, error);      // span + [unblind] stdout line
+const capture = captureError(error, { asyncFlow });  // references only, sync
+const analysis = analyseError(capture);              // edge chain + instances
+recordErrorAnalysis(analysis, span);                 // one mnemonica.error event
 ```
 
-- `report.kind` (`'caught-unblinded'`), the span name
-  (`'mnemonica.caught-exception'`) and the `[unblind]` stdout marker are
-  pinned downstream — keep them stable.
+- `analysis.source`: `'error'` (the error's own dive pin — evidence),
+  `'async-frame'` (the ALS frame at crash time — evidence),
+  `'last-context'` (the rest residue — a labelled guess), `'none'`.
+- Nothing is printed anywhere in the package — what gets logged is the
+  caller's visible choice.
 - Dive-side reads work too: `getFlow(error)` (the branch) and
   `getErrorInstance(error)` (the data) come from `@mnemonica/dive`
   directly — see dive's docs.
