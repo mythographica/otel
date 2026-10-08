@@ -97,7 +97,7 @@ asyncFlow.attach();               // unwrapped async hops → parental edge
   (request, message, command) plus the triple async scope; call it at your
   boundary, with framework-specific wiring a few lines on top (recipes in
   the README).
-- `feedPreRoot(raw)` — the thunderstruck boundary: feeds the entry
+- `feedPreRoot(raw)` — the entry boundary: feeds the entry
   payloads (body/query/params/headers) into the pre-root store,
   correlated by object identity. Framework shaping is the recipe's job.
 
@@ -109,9 +109,17 @@ carries its story.
 ```typescript
 import { captureError, analyseError, recordErrorAnalysis } from '@mnemonica/otel';
 
+// in a request error handler: record on the request's own span
 const capture = captureError(error, { asyncFlow });  // references only, sync
 const analysis = analyseError(capture);              // edge chain + instances
-recordErrorAnalysis(analysis, span);                 // one mnemonica.error event
+recordErrorAnalysis(analysis, requestSpan);          // one mnemonica.error event
+
+// in process.on('uncaughtException' | 'unhandledRejection'): no request
+// span exists — capture first, then record on a span of its own
+const crashCapture = captureError(error, { asyncFlow });
+const crashSpan = tracer.startSpan('uncaught error');
+recordErrorAnalysis(analyseError(crashCapture), crashSpan);
+crashSpan.end();   // the handler replaces Node's default crash: flush, then exit
 ```
 
 - `analysis.source`: `'error'` (the error's own dive pin — evidence),

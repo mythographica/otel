@@ -1,7 +1,7 @@
 /**
  * Error analysis — error → its dive edge → its instances.
  *
- * Plan: plan/boundary-cleanup.md step 1b. On uncaughtException /
+ * On uncaughtException /
  * unhandledRejection there is an error to analyse; this module finds
  * WHICH dive edge it came from, walks that edge's chain, and collects the
  * instances wired to it — returning DATA, never printing anything (the

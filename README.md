@@ -4,8 +4,9 @@ The framework-free Node.js core of the mnemonica observability stack.
 
 This package is everything a framework adapter needs that has nothing to
 do with any framework: the dive hook wiring, the OpenTelemetry providers,
-the ALS async-flow backbone, the thunderstruck pre-root forensics store,
-and error analysis (error → its dive edge → its instances) — all against plain structural types, so
+the ALS async-flow backbone, the pre-root store (entry payloads kept for
+the request's lifetime), and error analysis (error → its dive edge → its
+instances) — all against plain structural types, so
 they run in Express, Fastify, raw `http`, queue consumers, and CLIs
 unchanged.
 
@@ -52,7 +53,7 @@ Node ≥ 20.19 / 22.
 | `DiveOtelProvider` | OTel spans for EVERY dive-wrapped call, parented on dive's own trace; async spans close at settle |
 | `AsyncFlowProvider` | the ALS backbone: attributes UNWRAPPED async hops (timers, promise continuations, generator suspensions) to the parental dive edge; pins context instances for the scope's lifetime |
 | `runInEntryScope(entry, deps, fn)` | one root span per unit of work (request, message, command) + the triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
-| `feedPreRoot` / `feedValidatedPreRoot` / `getPreRoot` | thunderstruck pre-root store: request payloads correlated by OBJECT IDENTITY (WeakMap), retention = the request's lifetime |
+| `feedPreRoot` / `feedValidatedPreRoot` / `getPreRoot` | the pre-root store: request payloads correlated by OBJECT IDENTITY (WeakMap), retention = the request's lifetime |
 | `captureError(error, deps?)` / `analyseError(capture, budget?)` / `recordErrorAnalysis(analysis, span)` | the error analysis: which dive edge the error came from (four sources, evidence-labelled), the chain's instances as one lineage graph (lethe format), recorded on a span the caller passes — data returned, never printed |
 | `isMnemonicaInstance(value)` | realm-safe type guard via `getProps()` |
 | `formatFlow(target?)` / `errorContext(error)` | read-side helpers over dive's trace |
@@ -161,7 +162,7 @@ Recipes:
 import { runInEntryScope, feedPreRoot } from '@mnemonica/otel';
 
 app.use((req, res, next) => {
-  feedPreRoot({                                   // thunderstruck boundary
+  feedPreRoot({                                   // the entry payloads
     params  : req.params,
     query   : req.query,
     body    : req.body,
@@ -248,13 +249,32 @@ runInEntryScope(
 ```typescript
 import { captureError, analyseError, recordErrorAnalysis } from '@mnemonica/otel';
 
-// Express error middleware / Fastify setErrorHandler / process handler —
-// at uncaughtException/unhandledRejection, capture synchronously, analyse
-// when asked, record on the span YOU pass; what gets logged is your call:
+// Express error middleware / Fastify setErrorHandler — the request's own
+// span is there; record on it, answer the request:
 const capture = captureError(error, { asyncFlow });   // references only
 const analysis = analyseError(capture);               // the edge + instances
 recordErrorAnalysis(analysis, span);                  // one mnemonica.error event
 if (!res.headersSent) res.status(500).json({ message: analysis.message });
+```
+
+### Process handler (uncaught errors)
+
+```typescript
+import { captureError, analyseError, recordErrorAnalysis } from '@mnemonica/otel';
+
+// no request span here; capture synchronously first — the process may be
+// killed before deferred work runs — then analyse and record on a span of
+// its own; what gets logged is your call:
+const onCrash = (error: unknown) => {
+  const capture = captureError(error, { asyncFlow });   // references only
+  const analysis = analyseError(capture);               // the edge + instances
+  const span = tracer.startSpan('uncaught error');
+  recordErrorAnalysis(analysis, span);
+  span.end();
+  // a handler replaces Node's default crash: flush your exporter, then exit
+};
+process.on('uncaughtException', onCrash);
+process.on('unhandledRejection', onCrash);
 ```
 
 `analysis.source` is `'error'` | `'async-frame'` | `'last-context'` |
