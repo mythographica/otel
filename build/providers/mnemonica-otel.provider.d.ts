@@ -1,5 +1,5 @@
-import type { Tracer, Span } from '@opentelemetry/api';
-import type { TypesCollection } from 'mnemonica/module';
+import { type Tracer, type Span } from '@opentelemetry/api';
+import { type TypesCollection } from 'mnemonica/module';
 export declare class MnemonicaOtelProvider {
     private tracer;
     private pendingSpans;

@@ -13,12 +13,14 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { wrap, clear, getFlow } from '@mnemonica/dive';
-import { AsyncFlowProvider } from '../src/providers/async-flow.provider.js';
-import type { CrashContext } from '../src/providers/async-flow.provider.js';
+import {
+	AsyncFlowProvider,
+	type CrashContext,
+} from '../src/providers/async-flow.provider.js';
 
 function edgeIdOf (ctx: object): number {
 	const flow = getFlow(ctx);
-	const edge = flow[flow.length - 1];
+	const edge = flow[ flow.length - 1 ];
 	if (!edge) {
 		throw new Error('no edge for context');
 	}
@@ -63,9 +65,10 @@ describe('AsyncFlowProvider', () => {
 		const ctx = { id : 'promise-parent' };
 		let seen: CrashContext | undefined;
 		const wrapped = wrap(() => {
-			return Promise.resolve().then(() => {
+			const continuation = Promise.resolve().then(() => {
 				seen = provider.currentFrame();
 			});
+			return continuation;
 		}, ctx);
 		await provider.runInScope(() => wrapped());
 		expect(seen).toBeDefined();

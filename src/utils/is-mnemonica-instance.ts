@@ -5,5 +5,6 @@
 import { getProps } from 'mnemonica/module';
 
 export function isMnemonicaInstance (value: unknown): value is Record<string, unknown> {
-	return value != null && typeof value === 'object' && getProps(value) !== undefined;
+	const result = value != null && typeof value === 'object' && getProps(value) !== undefined;
+	return result;
 }

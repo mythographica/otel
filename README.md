@@ -48,15 +48,17 @@ Node ≥ 20.19 / 22.
 
 | Export | Role |
 |---|---|
-| `attachHooks(collection)` | wires a mnemonica TypesCollection to dive's lifecycle tracing (create edges + wrapped methods + context-carrying constructor args) |
+| `attachHooks(collection, { dive? })` | wires a mnemonica TypesCollection to dive's lifecycle tracing (create edges + wrapped methods + context-carrying constructor args) |
 | `MnemonicaOtelProvider` | OTel spans for mnemonica constructions (pre/post/error), parented by lineage, ALS-propagated |
 | `DiveOtelProvider` | OTel spans for EVERY dive-wrapped call, parented on dive's own trace; async spans close at settle |
 | `AsyncFlowProvider` | the ALS backbone: attributes UNWRAPPED async hops (timers, promise continuations, generator suspensions) to the parental dive edge; pins context instances for the scope's lifetime |
 | `runInEntryScope(entry, deps, fn)` | one root span per unit of work (request, message, command) + the triple scope entry (provider ALS, OTEL global context, async-flow root frame) |
 | `feedPreRoot` / `feedValidatedPreRoot` / `getPreRoot` | the pre-root store: request payloads correlated by OBJECT IDENTITY (WeakMap), retention = the request's lifetime |
 | `captureError(error, deps?)` / `analyseError(capture, budget?)` / `recordErrorAnalysis(analysis, span)` | the error analysis: which dive edge the error came from (four sources, evidence-labelled), the chain's instances as one lineage graph (lethe format), recorded on a span the caller passes — data returned, never printed |
+| `stampConstructions(collection)` / `startLinkedSpan(tracer, name, instance)` | the lineage link: the cross-language attribute contract (`mnemonica.instance.id`, `mnemonica.parent.id`, `mnemonica.type.collection`, `mnemonica.type.path`) stamped on the span current at construction, and post-request spans LINKED to the construction span |
 | `isMnemonicaInstance(value)` | realm-safe type guard via `getProps()` |
-| `formatFlow(target?)` / `errorContext(error)` | read-side helpers over dive's trace |
+| `formatFlow(target?, { dive? })` / `errorContext(error, { dive? })` | read-side helpers over dive's trace |
+| `DiveApi` / `defaultDiveApi` | the optional-dive contract: every API that reads or subscribes to dive accepts `options.dive` (your `new Dive()`), defaulting to the default dive |
 
 ## What you get in your traces
 
@@ -90,6 +92,14 @@ HTTP POST /users                  ← entry span (runInEntryScope)
   guess) — and collect the chain's instances into one lineage graph.
   Nothing is printed; `recordErrorAnalysis` puts the result on a span the
   caller passes, as one `mnemonica.error` event.
+- **Constructions join the trace by contract.** `stampConstructions`
+  stamps `mnemonica.instance.id`, `mnemonica.parent.id`,
+  `mnemonica.type.collection` and `mnemonica.type.path` — ids straight from
+  core's `utils.lineage`, the same ids the error-path graph carries — on
+  the span current at construction, and `startLinkedSpan` starts spans for
+  post-request work LINKED to that construction span. The attribute names
+  are the cross-language contract shared with the Go and Python ports, so
+  a trace and a lineage graph join on them.
 - **Dive edges join OTel traces.** `DiveOtelProvider` publishes
   edgeId → traceId pairs on a bounded `globalThis.__mnemonicaDiveTraceIds`
   map, so an external trace consumer reading dive's live edges can jump
@@ -141,6 +151,33 @@ they share `trace.getTracer('@mnemonica/otel')`.
 
 From here `otel` and `asyncFlow` are the deps the entry-scope recipes below
 pass around.
+
+### Tracing through your own dive
+
+Everything above subscribes to dive's **default dive**. If the code under
+observation traces through its own `new Dive()` (from `@mnemonica/dive`),
+pass it in — every API that reads or subscribes to dive takes
+`options.dive` and defaults to the default dive:
+
+```typescript
+import { Dive } from '@mnemonica/dive';
+
+const appDive = new Dive();
+
+attachHooks(defaultTypes, { dive: appDive });
+const diveOtel  = new DiveOtelProvider(undefined, { dive: appDive });
+const asyncFlow = new AsyncFlowProvider({ dive: appDive });
+diveOtel.attach();
+asyncFlow.attach();
+
+// read-side helpers and error analysis take it too
+formatFlow(instance, { dive: appDive });
+analyseError(captureError(err, { dive: appDive }));
+```
+
+Without the option the providers see only the default dive — an app using
+`new Dive()` would get no spans. The two dives stay independent: one dive's
+hooks never fire for the other's work.
 
 ## Use it from your own boundary
 

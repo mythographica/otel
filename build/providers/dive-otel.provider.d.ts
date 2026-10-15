@@ -17,7 +17,8 @@
  * Spans are keyed on edge id; every recorded edge fires leave (and, when
  * async, settle), so the map always drains.
  */
-import type { Tracer } from '@opentelemetry/api';
+import { type Tracer } from '@opentelemetry/api';
+import { type DiveOption } from '../dive-api.js';
 export declare class DiveOtelProvider {
     private tracer;
     private spans;
@@ -25,7 +26,8 @@ export declare class DiveOtelProvider {
     private edgeRefs;
     private released;
     private detachers;
-    constructor(tracer?: Tracer);
+    private dive;
+    constructor(tracer?: Tracer, options?: DiveOption);
     /**
      * Subscribe to dive's edge lifecycle. Idempotent: attaching twice would
      * double every span. Dive's clear() wipes subscribers — re-attach after it.

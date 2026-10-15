@@ -13,8 +13,10 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { SpanStatusCode, context as otelContext, trace } from '@opentelemetry/api';
 import { wrap, clear } from '@mnemonica/dive';
-import { createTypesCollection } from 'mnemonica/module';
-import type { TypesCollection } from 'mnemonica/module';
+import {
+	createTypesCollection,
+	type TypesCollection,
+} from 'mnemonica/module';
 import { runInEntryScope } from '../src/entry-scope.js';
 import { MnemonicaOtelProvider } from '../src/providers/mnemonica-otel.provider.js';
 import { DiveOtelProvider } from '../src/providers/dive-otel.provider.js';
@@ -40,7 +42,7 @@ describe('runInEntryScope', () => {
 		const deps = { tracer, otel };
 
 		const result = runInEntryScope(
-			{ name: 'job sync', attributes: { 'job.kind': 'sync' } },
+			{ name : 'job sync', attributes : { 'job.kind' : 'sync' } },
 			deps,
 			(span) => {
 				expect(trace.getSpan(otelContext.active())).toBe(span);
@@ -53,17 +55,17 @@ describe('runInEntryScope', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job sync');
-		expect(spans[0].attributes['job.kind']).toBe('sync');
-		expect(spans[0].parentSpanId).toBeUndefined();
-		expect(spans[0].status.code).not.toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].name).toBe('job sync');
+		expect(spans[ 0 ].attributes[ 'job.kind' ]).toBe('sync');
+		expect(spans[ 0 ].parentSpanId).toBeUndefined();
+		expect(spans[ 0 ].status.code).not.toBe(SpanStatusCode.ERROR);
 	});
 
 	it('ends the span when the returned promise settles', async () => {
 		const tracer = provider.getTracer('test');
 		const deps = { tracer, otel };
 
-		const pending = runInEntryScope({ name: 'job async' }, deps, async () => {
+		const pending = runInEntryScope({ name : 'job async' }, deps, async () => {
 			await sleep(15);
 			return 'done';
 		});
@@ -77,9 +79,9 @@ describe('runInEntryScope', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job async');
-		const durationMs = (spans[0].endTime[0] - spans[0].startTime[0]) * 1e3
-			+ (spans[0].endTime[1] - spans[0].startTime[1]) / 1e6;
+		expect(spans[ 0 ].name).toBe('job async');
+		const durationMs = (spans[ 0 ].endTime[ 0 ] - spans[ 0 ].startTime[ 0 ]) * 1e3
+			+ (spans[ 0 ].endTime[ 1 ] - spans[ 0 ].startTime[ 1 ]) / 1e6;
 		expect(durationMs).toBeGreaterThan(10);
 	});
 
@@ -90,7 +92,7 @@ describe('runInEntryScope', () => {
 		const boom = new Error('sync boom');
 		let caught: unknown;
 		try {
-			runInEntryScope({ name: 'job throw' }, deps, () => {
+			runInEntryScope({ name : 'job throw' }, deps, () => {
 				throw boom;
 			});
 		} catch (error) {
@@ -102,10 +104,10 @@ describe('runInEntryScope', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job throw');
-		expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
-		expect(spans[0].status.message).toBe('sync boom');
-		expect(spans[0].events.some((event) => event.name === 'exception')).toBe(true);
+		expect(spans[ 0 ].name).toBe('job throw');
+		expect(spans[ 0 ].status.code).toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].status.message).toBe('sync boom');
+		expect(spans[ 0 ].events.some((event) => event.name === 'exception')).toBe(true);
 	});
 
 	it('an async rejection sets ERROR status and rethrows at await', async () => {
@@ -113,7 +115,7 @@ describe('runInEntryScope', () => {
 		const deps = { tracer, otel };
 
 		const boom = new Error('async boom');
-		const pending = runInEntryScope({ name: 'job reject' }, deps, async () => {
+		const pending = runInEntryScope({ name : 'job reject' }, deps, async () => {
 			await sleep(5);
 			throw boom;
 		});
@@ -130,9 +132,9 @@ describe('runInEntryScope', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job reject');
-		expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
-		expect(spans[0].status.message).toBe('async boom');
+		expect(spans[ 0 ].name).toBe('job reject');
+		expect(spans[ 0 ].status.code).toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].status.message).toBe('async boom');
 	});
 
 	it('a non-native thenable is a plain value: same object back, work runs once, span already ended', async () => {
@@ -154,7 +156,7 @@ describe('runInEntryScope', () => {
 			},
 		};
 
-		const returned = runInEntryScope({ name: 'job lazy' }, deps, () => lazy);
+		const returned = runInEntryScope({ name : 'job lazy' }, deps, () => lazy);
 
 		// the caller gets fn's own object back, and the span is already
 		// ended — a non-native thenable does not extend the entry's lifetime
@@ -162,8 +164,8 @@ describe('runInEntryScope', () => {
 		await provider.forceFlush();
 		let spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job lazy');
-		expect(spans[0].status.code).not.toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].name).toBe('job lazy');
+		expect(spans[ 0 ].status.code).not.toBe(SpanStatusCode.ERROR);
 		expect(thenCalls).toBe(0);
 
 		// the caller awaits it: then runs exactly once, the work runs once
@@ -191,9 +193,9 @@ describe('runInEntryScope', () => {
 
 		const deps = { tracer, otel };
 		let openedSpan: import('@opentelemetry/api').Span | undefined;
-		runInEntryScope({ name: 'request' }, deps, (span) => {
+		runInEntryScope({ name : 'request' }, deps, (span) => {
 			openedSpan = span;
-			const ctx = { name: 'ctx' };
+			const ctx = { name : 'ctx' };
 			const wrapped = wrap(function loadEntity (this: unknown) {
 				return 'loaded';
 			}, ctx);
@@ -223,7 +225,7 @@ describe('runInEntryScope', () => {
 		const deps = { tracer, otel };
 
 		const span = runInEntryScope(
-			{ name: 'job manual', endOnReturn: false },
+			{ name : 'job manual', endOnReturn : false },
 			deps,
 			(s) => s,
 		);
@@ -236,7 +238,7 @@ describe('runInEntryScope', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('job manual');
+		expect(spans[ 0 ].name).toBe('job manual');
 	});
 
 	it('opens the async-flow root frame when given', async () => {
@@ -246,7 +248,7 @@ describe('runInEntryScope', () => {
 
 		let frameInside: unknown;
 		const result = runInEntryScope(
-			{ name: 'job flow' },
+			{ name : 'job flow' },
 			{ tracer, otel, asyncFlow },
 			() => {
 				frameInside = asyncFlow.currentFrame();

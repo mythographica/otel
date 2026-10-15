@@ -35,8 +35,8 @@ import {
 	type ErrorAnalysis,
 } from '../src/error-analysis.js';
 
-const require = createRequire(import.meta.url);
-const schemaPath = require.resolve('@mnemonica/lethe/lineage.schema.json');
+const cjsRequire = createRequire(import.meta.url);
+const schemaPath = cjsRequire.resolve('@mnemonica/lethe/lineage.schema.json');
 const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
 const ajv = new Ajv2020();
 const validateGraph = ajv.compile(schema);
@@ -45,11 +45,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = path.join(here, 'fixtures', 'error-analysis-child.mjs');
 
 const runCase = (name: string): Record<string, unknown> => {
-	const out = execFileSync(process.execPath, [fixture, name], {
-		encoding   : 'utf8',
-		env        : { ...process.env, NODE_OPTIONS: '--expose-gc' },
+	const out = execFileSync(process.execPath, [ fixture, name ], {
+		encoding : 'utf8',
+		env      : { ...process.env, NODE_OPTIONS : '--expose-gc' },
 	});
-	const line = out.trim().split('\n').pop() ?? '{}';
+	const line = out.trim().split('\n')
+		.pop() ?? '{}';
 	const parsed = JSON.parse(line) as Record<string, unknown>;
 	return parsed;
 };
@@ -69,7 +70,8 @@ const buildChain = () => {
 	});
 	const rootA = new Root('a');
 	const rootB = new Root('b');
-	return { rootA, rootB };
+	const roots = { rootA, rootB };
+	return roots;
 };
 
 describe('error analysis — sources', () => {
@@ -99,10 +101,10 @@ describe('error analysis — sources', () => {
 		expect(analysis.message).toBe('a-source boom');
 		// chain: the root construction, then the two calls (oldest first)
 		expect(analysis.edges.map((edge) => `${edge.kind}:${edge.name}`))
-			.toEqual(['create:ChainRoot', 'call:outer', 'call:inner']);
+			.toEqual([ 'create:ChainRoot', 'call:outer', 'call:inner' ]);
 		// the construction edge is 'ok'; the calls the error passed through
 		// are 'error'
-		expect(analysis.edges[0].status).toBe('ok');
+		expect(analysis.edges[ 0 ].status).toBe('ok');
 		expect(analysis.edges.slice(1).every((edge) => edge.status === 'error')).toBe(true);
 		expect(analysis.lineage).not.toBeNull();
 		expect(validateGraph(analysis.lineage)).toBe(true);
@@ -115,7 +117,7 @@ describe('error analysis — sources', () => {
 		const result = runCase('timer');
 		expect(result.source).toBe('async-frame');
 		expect(result.evidence).toBe(true);
-		expect(result.edgeNames).toEqual(['create:Root', 'call:schedulerTimer']);
+		expect(result.edgeNames).toEqual([ 'create:Root', 'call:schedulerTimer' ]);
 		expect(result.hasLineage).toBe(true);
 	});
 
@@ -123,7 +125,7 @@ describe('error analysis — sources', () => {
 		const result = runCase('rejection');
 		expect(result.source).toBe('async-frame');
 		expect(result.evidence).toBe(true);
-		expect(result.edgeNames).toEqual(['create:Root', 'call:fireAndForget']);
+		expect(result.edgeNames).toEqual([ 'create:Root', 'call:fireAndForget' ]);
 		expect(result.hasLineage).toBe(true);
 	});
 
@@ -131,7 +133,7 @@ describe('error analysis — sources', () => {
 		const result = runCase('last-context');
 		expect(result.source).toBe('last-context');
 		expect(result.evidence).toBe(false);
-		expect(result.edgeNames).toEqual(['create:Root', 'call:schedulerResidue']);
+		expect(result.edgeNames).toEqual([ 'create:Root', 'call:schedulerResidue' ]);
 	});
 
 	it('(d) nothing to attribute: plain error, no dive state', () => {
@@ -166,14 +168,14 @@ describe('error analysis — sources', () => {
 		});
 		let caught: unknown;
 		try {
-			new Failing({ marker: 'corner-cut' });
+			new Failing({ marker : 'corner-cut' });
 		} catch (error) {
 			caught = error;
 		}
 		const analysis = analyseError(captureError(caught));
 		expect(analysis.failedConstruction).toBeDefined();
 		expect(analysis.failedConstruction?.typeName).toBe('FailingThing');
-		expect(analysis.failedConstruction?.attemptedArgs).toEqual([{ marker: 'corner-cut' }]);
+		expect(analysis.failedConstruction?.attemptedArgs).toEqual([ { marker : 'corner-cut' } ]);
 	});
 });
 
@@ -200,11 +202,11 @@ describe('error analysis — budget and silence', () => {
 			caught = error;
 		}
 
-		const analysis = analyseError(captureError(caught), { maxEdges: 3, maxInstances: 1 });
+		const analysis = analyseError(captureError(caught), { maxEdges : 3, maxInstances : 1 });
 		// full chain is create:ChainRoot + 3 calls = 4; the failure-proximal
 		// TAIL is kept (level1..level3), the cut is reported
 		expect(analysis.edges.length).toBe(3);
-		expect(analysis.edges.map((edge) => edge.name)).toEqual(['level1', 'level2', 'level3']);
+		expect(analysis.edges.map((edge) => edge.name)).toEqual([ 'level1', 'level2', 'level3' ]);
 		expect(analysis.edgesTruncated).toBe(1);
 		// distinct live instances: rootA (create + level1) and rootB
 		// (level2 + level3); capped at 1
@@ -276,12 +278,12 @@ describe('recordErrorAnalysis — on a span the caller passes', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		const event = spans[0].events.find((e) => e.name === 'mnemonica.error');
+		const event = spans[ 0 ].events.find((e) => e.name === 'mnemonica.error');
 		expect(event).toBeDefined();
-		expect(event!.attributes['mnemonica.error.source']).toBe('error');
-		expect(event!.attributes['mnemonica.error.evidence']).toBe(true);
+		expect(event!.attributes[ 'mnemonica.error.source' ]).toBe('error');
+		expect(event!.attributes[ 'mnemonica.error.evidence' ]).toBe(true);
 
-		const graphRaw = event!.attributes['mnemonica.lineage.graph'] as string;
+		const graphRaw = event!.attributes[ 'mnemonica.lineage.graph' ] as string;
 		expect(typeof graphRaw).toBe('string');
 		const graph = JSON.parse(graphRaw);
 		expect(validateGraph(graph)).toBe(true);

@@ -63,41 +63,47 @@ describe('DiveOtelProvider — edge.drop interaction', () => {
 	});
 
 	it('wipe mid-flight: the running span still closes at settle; otel maps drain after GC', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const slow = wrap(function slowCall () {
-			return new Promise((resolve) => {
+			const slowPromise = new Promise((resolve) => {
 				setTimeout(resolve, 30);
 			});
+			return slowPromise;
 		}, ctx);
 		const pending = slow();
 		await sleepTick();
 
 		const running = getRunningEdges();
 		expect(running).toHaveLength(1);
-		running[0].drop(); // wipe the trace the open span belongs to
+		// wipe the trace the open span belongs to
+		running[ 0 ].drop();
 
 		const probe = diveOtel as unknown as ProviderProbe;
-		expect(probe.spans.size).toBe(1); // the wipe does NOT close open spans
+		// the wipe does NOT close open spans
+		expect(probe.spans.size).toBe(1);
 		await pending;
-		expect(probe.spans.size).toBe(0); // settle drains it as usual
+		// settle drains it as usual
+		expect(probe.spans.size).toBe(0);
 
 		await forceGcRounds(3);
-		expect(probe.edgeRefs.size).toBe(0); // FR released every wiped edge
+		// FR released every wiped edge
+		expect(probe.edgeRefs.size).toBe(0);
 		expect(probe.edgeParents.size).toBe(0);
 
 		await tracerProvider.forceFlush();
 		const spans = exporter.getFinishedSpans();
 		expect(spans).toHaveLength(1);
-		expect(spans[0].name).toBe('dive.call:slowCall');
-		expect(spans[0].attributes['dive.status']).toBe('ok');
-		expect(typeof spans[0].attributes['dive.duration_ms']).toBe('number');
+		expect(spans[ 0 ].name).toBe('dive.call:slowCall');
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('ok');
+		expect(typeof spans[ 0 ].attributes[ 'dive.duration_ms' ]).toBe('number');
 	});
 
 	it('post-wipe root ids: a fresh story roots at itself', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const old = wrap(function oldCall () { return 1; }, ctx);
 		old();
-		getFlow(ctx)[0].drop(); // wipe the single-edge story
+		// wipe the single-edge story
+		getFlow(ctx)[ 0 ].drop();
 		await forceGcRounds(3);
 
 		const fresh = wrap(function freshCall () { return 2; }, ctx);
@@ -107,7 +113,7 @@ describe('DiveOtelProvider — edge.drop interaction', () => {
 		const spans = exporter.getFinishedSpans();
 		const freshSpan = spans.find((s) => s.name === 'dive.call:freshCall');
 		expect(freshSpan).toBeDefined();
-		expect(freshSpan!.attributes['dive.root_edge_id'])
-			.toBe(freshSpan!.attributes['dive.edge_id']);
+		expect(freshSpan!.attributes[ 'dive.root_edge_id' ])
+			.toBe(freshSpan!.attributes[ 'dive.edge_id' ]);
 	});
 });

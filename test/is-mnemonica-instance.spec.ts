@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { define, getProps } from 'mnemonica/module';
+import { define } from 'mnemonica/module';
 import { isMnemonicaInstance } from '../src/utils/is-mnemonica-instance.js';
 
 describe('isMnemonicaInstance', () => {
@@ -13,7 +13,7 @@ describe('isMnemonicaInstance', () => {
 
 	it('returns false for plain objects', () => {
 		expect(isMnemonicaInstance({})).toBe(false);
-		expect(isMnemonicaInstance({ x: 42 })).toBe(false);
+		expect(isMnemonicaInstance({ x : 42 })).toBe(false);
 	});
 
 	it('returns false for null/undefined', () => {

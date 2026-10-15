@@ -20,7 +20,7 @@
  * recipe ends the span on response finish). fn receives the span and its
  * result passes through unchanged.
  */
-import type { Attributes, Span, Tracer } from '@opentelemetry/api';
+import { type Attributes, type Span, type Tracer } from '@opentelemetry/api';
 import type { MnemonicaOtelProvider } from './providers/mnemonica-otel.provider.js';
 import type { AsyncFlowProvider } from './providers/async-flow.provider.js';
 /** The providers the entry scope drives — the same trio the HTTP scope took. */

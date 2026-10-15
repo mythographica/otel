@@ -1,3 +1,4 @@
+import { type DiveOption } from '../dive-api.js';
 import type { FlowEdge } from '@mnemonica/dive';
 export type FlowFrame = {
     /** the dive edge this frame belongs to (null on the root frame) */
@@ -27,6 +28,9 @@ export type CrashContext = {
 export declare class AsyncFlowProvider {
     private frames;
     private detachers;
+    private dive;
+    private als;
+    constructor(options?: DiveOption);
     /**
      * Subscribe to dive's edge lifecycle. Idempotent: attaching twice would
      * double every frame push. Dive's clear() wipes subscribers — re-attach

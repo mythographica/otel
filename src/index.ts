@@ -9,6 +9,9 @@
  * Provides:
  *   - attachHooks() — mnemonica lifecycle → dive edge wiring
  *   - MnemonicaOtelProvider — OTel spans for constructions
+ *   - stampConstructions()/startLinkedSpan() — the lineage link: the
+ *     cross-language contract attributes stamped on the span current at
+ *     construction, and post-request spans LINKED to the construction span
  *   - DiveOtelProvider — OTel spans for every dive-wrapped call
  *   - AsyncFlowProvider — ALS backbone attributing unwrapped async hops
  *   - runInEntryScope() — one root span per unit of work (request, message,
@@ -23,11 +26,28 @@
  *   - formatFlow()/errorContext() — read-side helpers over dive's trace
  */
 
-export { attachHooks } from './hooks/attach-hooks.js';
+export {
+	attachHooks, type AttachHooksOptions 
+} from './hooks/attach-hooks.js';
 export { MnemonicaOtelProvider } from './providers/mnemonica-otel.provider.js';
+export {
+	stampConstructions,
+	startLinkedSpan,
+	ATTR_INSTANCE_ID,
+	ATTR_PARENT_ID,
+	ATTR_TYPE_COLLECTION,
+	ATTR_TYPE_PATH,
+} from './lineage-link.js';
 export { DiveOtelProvider } from './providers/dive-otel.provider.js';
-export { AsyncFlowProvider, type FlowFrame, type CrashContext } from './providers/async-flow.provider.js';
-export { runInEntryScope, type EntryDefinition, type EntryScopeDeps } from './entry-scope.js';
+export {
+	AsyncFlowProvider, type FlowFrame, type CrashContext 
+} from './providers/async-flow.provider.js';
+export {
+	defaultDiveApi, type DiveApi, type DiveOption 
+} from './dive-api.js';
+export {
+	runInEntryScope, type EntryDefinition, type EntryScopeDeps 
+} from './entry-scope.js';
 export {
 	feedPreRoot,
 	feedValidatedPreRoot,
@@ -48,4 +68,6 @@ export {
 	type AnalysedEdge,
 } from './error-analysis.js';
 export { isMnemonicaInstance } from './utils/is-mnemonica-instance.js';
-export { formatFlow, errorContext, type FormattedFlowEdge } from './utils/dive-flow.js';
+export {
+	formatFlow, errorContext, type FormattedFlowEdge 
+} from './utils/dive-flow.js';

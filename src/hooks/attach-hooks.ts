@@ -14,30 +14,42 @@
  * creationError→ record a failed 'create' edge (status: 'error') under the
  *                surviving parent and pin the error to it: the failure is
  *                recoverable off the error object itself.
+ *
+ * All of it runs against ONE dive: the default dive unless the caller
+ * passes their own (`new Dive()` from @mnemonica/dive) via options.dive —
+ * the collection then traces into that dive alone.
  */
 import {
-	enterContext,
-	wrapConstructorArg,
-	upgradeConstructorArg,
-	wrapInstanceMethods,
-	recordCreation,
-	recordCreationError,
-	isWrappedFunction,
-} from '@mnemonica/dive';
+	resolveDive,
+	type DiveApi,
+	type DiveOption,
+} from '../dive-api.js';
+import type { AnyFn } from '@mnemonica/dive';
 import type { TypesCollection } from 'mnemonica/module';
 
-export function attachHooks (collection: TypesCollection): void {
+export type AttachHooksOptions = DiveOption;
+
+// `typeof === 'function'` narrows to the banned bare Function type; this
+// guard re-grounds the value to dive's AnyFn instead (never[] accepts
+// every parameter list — the caller's signature is the caller's business)
+const isAnyFn = (value: unknown): value is AnyFn => {
+	const result = typeof value === 'function';
+	return result;
+};
+
+export function attachHooks (collection: TypesCollection, options?: AttachHooksOptions): void {
+	const dive: DiveApi = resolveDive(options);
 	collection.registerHook('preCreation', (hookData) => {
 		const parent = hookData.existentInstance;
 		if (parent) {
-			enterContext(parent);
+			dive.enterContext(parent);
 		}
-		const args = hookData.args;
+		const { args } = hookData;
 		if (Array.isArray(args)) {
 			for (let i = 0; i < args.length; i++) {
-				const arg = args[i];
-				if (typeof arg === 'function' && !isWrappedFunction(arg)) {
-					args[i] = wrapConstructorArg(arg as (...a: unknown[]) => unknown, parent);
+				const arg = args[ i ];
+				if (isAnyFn(arg) && !dive.isWrappedFunction(arg)) {
+					args[ i ] = dive.wrapConstructorArg(arg, parent);
 				}
 			}
 		}
@@ -50,15 +62,15 @@ export function attachHooks (collection: TypesCollection): void {
 		}
 		if (Array.isArray(hookData.args)) {
 			for (const arg of hookData.args) {
-				upgradeConstructorArg(arg, instance);
+				dive.upgradeConstructorArg(arg, instance);
 			}
 		}
-		recordCreation(hookData.TypeName || 'anonymous', instance, hookData.existentInstance);
-		wrapInstanceMethods(instance);
+		dive.recordCreation(hookData.TypeName || 'anonymous', instance, hookData.existentInstance);
+		dive.wrapInstanceMethods(instance);
 	});
 
 	collection.registerHook('creationError', (hookData) => {
-		recordCreationError(
+		dive.recordCreationError(
 			hookData.TypeName || 'anonymous',
 			hookData.inheritedInstance,
 			hookData.existentInstance

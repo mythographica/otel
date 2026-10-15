@@ -10,8 +10,10 @@ import {
 	InMemorySpanExporter,
 	SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
-import { createTypesCollection } from 'mnemonica/module';
-import type { TypesCollection } from 'mnemonica/module';
+import {
+	createTypesCollection,
+	type TypesCollection,
+} from 'mnemonica/module';
 import { MnemonicaOtelProvider } from '../src/providers/mnemonica-otel.provider.js';
 
 describe('MnemonicaOtelProvider', () => {
@@ -39,9 +41,9 @@ describe('MnemonicaOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('mnemonica.MyType');
-		expect(spans[0].attributes['mnemonica.type_name']).toBe('MyType');
-		expect(spans[0].attributes['mnemonica.hook']).toBe('postCreation');
+		expect(spans[ 0 ].name).toBe('mnemonica.MyType');
+		expect(spans[ 0 ].attributes[ 'mnemonica.type_name' ]).toBe('MyType');
+		expect(spans[ 0 ].attributes[ 'mnemonica.hook' ]).toBe('postCreation');
 	});
 
 	it('nests child spans under parent instance spans', async () => {
@@ -53,7 +55,7 @@ describe('MnemonicaOtelProvider', () => {
 
 		const Parent = collection.define('Parent', function () {});
 		const parent = new Parent();
-		const Child = Parent.define('Child', function () {});
+		Parent.define('Child', function () {});
 		new parent.Child();
 
 		await provider.forceFlush();
@@ -130,7 +132,7 @@ describe('MnemonicaOtelProvider', () => {
 	it('records exception on creationError', async () => {
 		const tracer = provider.getTracer('test');
 		const otel = new MnemonicaOtelProvider(tracer);
-		const collection: TypesCollection = createTypesCollection({ blockErrors: true });
+		const collection: TypesCollection = createTypesCollection({ blockErrors : true });
 
 		otel.attachHooks(collection);
 
@@ -147,10 +149,10 @@ describe('MnemonicaOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('mnemonica.MyType');
-		expect(spans[0].attributes['mnemonica.hook']).toBe('creationError');
-		expect(spans[0].events.length).toBeGreaterThan(0);
-		expect(spans[0].events[0].name).toBe('exception');
+		expect(spans[ 0 ].name).toBe('mnemonica.MyType');
+		expect(spans[ 0 ].attributes[ 'mnemonica.hook' ]).toBe('creationError');
+		expect(spans[ 0 ].events.length).toBeGreaterThan(0);
+		expect(spans[ 0 ].events[ 0 ].name).toBe('exception');
 	});
 
 	it('has zero overhead when no tracer is used', () => {
@@ -175,11 +177,11 @@ describe('MnemonicaOtelProvider', () => {
 
 		const Parent = collection.define('Parent', function () {});
 		const parent = new Parent();
-		const ChildA = Parent.define('ChildA', async function (_ms: number) {
+		Parent.define('ChildA', async function (_ms: number) {
 			await sleep(_ms);
 			return this;
 		});
-		const ChildB = Parent.define('ChildB', async function (_ms: number) {
+		Parent.define('ChildB', async function (_ms: number) {
 			await sleep(_ms);
 			return this;
 		});
@@ -189,7 +191,7 @@ describe('MnemonicaOtelProvider', () => {
 		// spanA would leak and a zero-length fallback exported instead.
 		const pendingA = new parent.ChildA(50);
 		const pendingB = new parent.ChildB(5);
-		await Promise.all([pendingA, pendingB]);
+		await Promise.all([ pendingA, pendingB ]);
 
 		await provider.forceFlush();
 
@@ -202,7 +204,7 @@ describe('MnemonicaOtelProvider', () => {
 		// A's span must cover the whole construction (~50ms), not start at
 		// postCreation time as a fallback would.
 		const durationMs = (s: NonNullable<typeof spanA>) =>
-			(s.endTime[0] - s.startTime[0]) * 1e3 + (s.endTime[1] - s.startTime[1]) / 1e6;
+			(s.endTime[ 0 ] - s.startTime[ 0 ]) * 1e3 + (s.endTime[ 1 ] - s.startTime[ 1 ]) / 1e6;
 		expect(durationMs(spanA!)).toBeGreaterThan(40);
 		expect(durationMs(spanB!)).toBeGreaterThan(0);
 	});

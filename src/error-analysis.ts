@@ -40,9 +40,14 @@
  *   CALLER PASSES: one 'mnemonica.error' event with the lineage graph JSON
  *   in 'mnemonica.lineage.graph' plus the source and the evidence flag.
  */
-import { getFlow, current } from '@mnemonica/dive';
+import {
+	resolveDive,
+	type DiveApi,
+} from './dive-api.js';
 import type { FlowEdge } from '@mnemonica/dive';
-import { utils, getProps } from 'mnemonica/module';
+import {
+	utils, getProps 
+} from 'mnemonica/module';
 import type { Span } from '@opentelemetry/api';
 import type { AsyncFlowProvider } from './providers/async-flow.provider.js';
 
@@ -60,6 +65,9 @@ export type ErrorSource = 'error' | 'async-frame' | 'last-context' | 'none';
 
 export interface ErrorAnalysisDeps {
 	asyncFlow?: AsyncFlowProvider;
+	/** the dive to read the trace from — the default dive unless the caller
+	 *  traces through their own */
+	dive?: DiveApi;
 }
 
 export interface AnalysisBudget {
@@ -114,14 +122,20 @@ export interface ErrorCapture {
 	frameInstances : object[];
 	/** dive.current() at capture time — the rest residue */
 	current        : object | null;
+	/** the dive the trace is read from at analyse time — resolved at
+	 *  capture (the default dive when none was given) so the capture alone
+	 *  is enough for analyseError */
+	dive?          : DiveApi;
 }
 
 export function captureError (error: unknown, deps?: ErrorAnalysisDeps): ErrorCapture {
+	const dive = resolveDive(deps);
 	const frame = deps?.asyncFlow?.currentFrame();
 	const capture: ErrorCapture = {
 		error,
 		frameInstances : frame?.instances ?? [],
-		current        : current() ?? null,
+		current        : dive.current() ?? null,
+		dive,
 	};
 	if (frame?.edge !== undefined) {
 		capture.frameEdge = frame.edge;
@@ -152,6 +166,7 @@ export function analyseError (
 	capture  : ErrorCapture,
 	budget   : AnalysisBudget = {},
 ): ErrorAnalysis {
+	const dive = capture.dive ?? resolveDive();
 	const maxEdges = budget.maxEdges ?? DEFAULT_MAX_EDGES;
 	const maxInstances = budget.maxInstances ?? DEFAULT_MAX_INSTANCES;
 	const message = capture.error instanceof Error
@@ -164,7 +179,7 @@ export function analyseError (
 	let chain: FlowEdge[] = [];
 
 	if (capture.error instanceof Error) {
-		const fromError = getFlow(capture.error);
+		const fromError = dive.getFlow(capture.error);
 		if (fromError.length > 0) {
 			source = 'error';
 			evidence = true;
@@ -174,7 +189,7 @@ export function analyseError (
 	if (source === 'none' && capture.frameEdge !== undefined) {
 		// the frame holds the LIVE edge (dive's enter payload), alive as
 		// long as the frame — getFlow cannot come back empty here
-		const fromFrame = getFlow(capture.frameEdge);
+		const fromFrame = dive.getFlow(capture.frameEdge);
 		if (fromFrame.length > 0) {
 			source = 'async-frame';
 			evidence = true;
@@ -182,7 +197,7 @@ export function analyseError (
 		}
 	}
 	if (source === 'none' && capture.current !== null) {
-		const fromCurrent = getFlow(capture.current);
+		const fromCurrent = dive.getFlow(capture.current);
 		if (fromCurrent.length > 0) {
 			source = 'last-context';
 			evidence = false;
@@ -223,7 +238,7 @@ export function analyseError (
 	const liveInstances: object[] = [];
 	let instancesSkipped = 0;
 	for (const edge of keptEdges) {
-		const instance = edge.instance;
+		const { instance } = edge;
 		if (instance === undefined) {
 			// count only instances that WERE there and got collected;
 			// edges recorded without an instance are not skipped data
@@ -251,7 +266,7 @@ export function analyseError (
 		edges,
 		edgesTruncated,
 		lineage,
-		instances            : keptInstances.length,
+		instances : keptInstances.length,
 		instancesSkipped,
 		instancesTruncated,
 	};
@@ -268,11 +283,11 @@ export function analyseError (
  */
 export function recordErrorAnalysis (analysis: ErrorAnalysis, span: Span): void {
 	const attributes: Record<string, string | boolean> = {
-		[ATTR_SOURCE]   : analysis.source,
-		[ATTR_EVIDENCE] : analysis.evidence,
+		[ ATTR_SOURCE ]   : analysis.source,
+		[ ATTR_EVIDENCE ] : analysis.evidence,
 	};
 	if (analysis.lineage !== null) {
-		attributes[ATTR_LINEAGE_GRAPH] = JSON.stringify(analysis.lineage);
+		attributes[ ATTR_LINEAGE_GRAPH ] = JSON.stringify(analysis.lineage);
 	}
 	span.addEvent(EVENT_ERROR, attributes);
 }

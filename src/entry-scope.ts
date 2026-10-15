@@ -20,8 +20,14 @@
  * recipe ends the span on response finish). fn receives the span and its
  * result passes through unchanged.
  */
-import type { Attributes, Span, Tracer } from '@opentelemetry/api';
-import { context as otelContext, trace, SpanStatusCode } from '@opentelemetry/api';
+import {
+	context as otelContext,
+	trace,
+	SpanStatusCode,
+	type Attributes,
+	type Span,
+	type Tracer,
+} from '@opentelemetry/api';
 import type { MnemonicaOtelProvider } from './providers/mnemonica-otel.provider.js';
 import type { AsyncFlowProvider } from './providers/async-flow.provider.js';
 
@@ -72,9 +78,11 @@ export function runInEntryScope<T> (
 	const run = (): T => {
 		try {
 			const result = deps.otel.runWithSpan(span, () => {
-				return otelContext.with(activeCtx, () => {
-					return fn(span);
+				const withCtx = otelContext.with(activeCtx, () => {
+					const fnResult = fn(span);
+					return fnResult;
 				});
+				return withCtx;
 			});
 			if (!endOnReturn) {
 				return result;
@@ -112,7 +120,9 @@ export function runInEntryScope<T> (
 	};
 
 	if (deps.asyncFlow) {
-		return deps.asyncFlow.runInScope(run);
+		const scoped = deps.asyncFlow.runInScope(run);
+		return scoped;
 	}
-	return run();
+	const direct = run();
+	return direct;
 }

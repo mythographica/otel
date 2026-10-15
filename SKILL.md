@@ -100,6 +100,14 @@ asyncFlow.attach();               // unwrapped async hops → parental edge
 - `feedPreRoot(raw)` — the entry boundary: feeds the entry
   payloads (body/query/params/headers) into the pre-root store,
   correlated by object identity. Framework shaping is the recipe's job.
+- `stampConstructions(collection)` — the lineage link: every construction
+  stamps `mnemonica.instance.id`, `mnemonica.parent.id`,
+  `mnemonica.type.collection`, `mnemonica.type.path` on the span current at
+  construction (ids from core `utils.lineage`). Complements
+  `MnemonicaOtelProvider` — attribute stamping on the request span, not
+  per-construction spans.
+- `startLinkedSpan(tracer, name, instance)` — a span for work that outlives
+  the request, LINKED to the construction span recorded at stamping.
 
 ## Reading results in a crash handler
 
@@ -149,11 +157,30 @@ crashSpan.end();   // the handler replaces Node's default crash: flush, then exi
 - **Queues / CLI / tests**: no request boundary — open an explicit scope
   per job with `asyncFlow.runInScope(() => consume(message))`.
 
+## Your own dive
+
+By default otel subscribes to dive's **default dive** — if the code under
+observation traces through its own `new Dive()` (from `@mnemonica/dive`),
+it gets no spans unless you pass the dive in. Every API that reads or
+subscribes to dive accepts `options.dive`:
+
+```typescript
+import { Dive } from '@mnemonica/dive';
+import { attachHooks, DiveOtelProvider, AsyncFlowProvider } from '@mnemonica/otel';
+
+const appDive = new Dive();
+attachHooks(defaultTypes, { dive: appDive });
+const diveOtel  = new DiveOtelProvider(undefined, { dive: appDive });
+const asyncFlow = new AsyncFlowProvider({ dive: appDive });
+```
+
+The read side takes it too: `formatFlow(target, { dive })`,
+`errorContext(error, { dive })`, `captureError(error, { dive, asyncFlow })`.
+
 ## Version notes
 
 - `mnemonica`, `@mnemonica/dive`, and `@opentelemetry/api` are peer
   dependencies — the app must own exactly one copy of each (process
   singletons).
-- The supported dive range is `^0.7.0 || ^0.8.0 || ^0.9.0 || ^0.10.0`;
-  with dive ≥ 0.9.0 the CJS `require()` chain is plain CJS end-to-end,
-  older dives load through `require(esm)` (Node ≥ 20.19 / 22).
+- The supported dive range is `^0.10.3`; the CJS `require()` chain is plain
+  CJS end-to-end.

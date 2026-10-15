@@ -47,7 +47,8 @@ export interface PreRootData {
 }
 
 function isObjectKey (value: unknown): value is object {
-	return value !== null && (typeof value === 'object' || typeof value === 'function');
+	const result = value !== null && (typeof value === 'object' || typeof value === 'function');
+	return result;
 }
 
 const preRootRecords = new WeakMap<object, PreRootRecord>();
@@ -61,7 +62,7 @@ const preRootRecords = new WeakMap<object, PreRootRecord>();
  */
 export function feedPreRoot (raw: RawPreRootPayload): void {
 	const record: PreRootRecord = { raw };
-	for (const part of [raw.params, raw.query, raw.body, raw.headers, raw.request]) {
+	for (const part of [ raw.params, raw.query, raw.body, raw.headers, raw.request ]) {
 		if (isObjectKey(part)) {
 			preRootRecords.set(part, record);
 		}

@@ -17,16 +17,30 @@
  * Spans are keyed on edge id; every recorded edge fires leave (and, when
  * async, settle), so the map always drains.
  */
-import type { Span, Tracer } from '@opentelemetry/api';
-import { SpanStatusCode, context as otelContext, trace } from '@opentelemetry/api';
 import {
-	registerHook,
-	type DiveCreatePayload,
-	type DiveEnterPayload,
-	type DiveLeavePayload,
-	type DiveRecontextPayload,
-	type DiveSettlePayload,
-	type FlowEdge,
+	SpanStatusCode,
+	context as otelContext,
+	trace,
+	type Span,
+	type Tracer,
+} from '@opentelemetry/api';
+import {
+	resolveDive,
+	type DiveApi,
+	type DiveOption,
+} from '../dive-api.js';
+import {
+	ATTR_INSTANCE_ID,
+	instanceRef,
+} from '../lineage-link.js';
+import { isMnemonicaInstance } from '../utils/is-mnemonica-instance.js';
+import type {
+	DiveCreatePayload,
+	DiveEnterPayload,
+	DiveLeavePayload,
+	DiveRecontextPayload,
+	DiveSettlePayload,
+	FlowEdge,
 } from '@mnemonica/dive';
 
 // Call/method/construct edges carry their callsite as `name`
@@ -89,9 +103,13 @@ export class DiveOtelProvider {
 		this.edgeParents.delete(edgeId);
 	});
 	private detachers: Array<() => void> = [];
+	// the dive this provider subscribes to — the default dive unless the
+	// caller traces through their own
+	private dive: DiveApi;
 
-	constructor (tracer?: Tracer) {
+	constructor (tracer?: Tracer, options?: DiveOption) {
 		this.tracer = tracer ?? trace.getTracer('@mnemonica/otel');
+		this.dive = resolveDive(options);
 	}
 
 	/**
@@ -103,21 +121,21 @@ export class DiveOtelProvider {
 			return;
 		}
 		this.detachers.push(
-			registerHook('enter', (payload) => {
+			this.dive.registerHook('enter', (payload) => {
 				this.onEnter(payload);
 			}),
-			registerHook('leave', (payload) => {
+			this.dive.registerHook('leave', (payload) => {
 				this.onLeave(payload);
 			}),
-			registerHook('settle', (payload) => {
+			this.dive.registerHook('settle', (payload) => {
 				this.onSettle(payload);
 			}),
-			registerHook('recontext', (payload) => {
+			this.dive.registerHook('recontext', (payload) => {
 				this.onRecontext(payload);
 			}),
-			// dive 0.7 support is gone (peer range is ^0.10.1): the 'create'
+			// dive 0.7 support is gone (peer range is ^0.10.3): the 'create'
 			// event exists since 0.8.0, subscribe directly
-			registerHook('create', (payload) => {
+			this.dive.registerHook('create', (payload) => {
 				this.onCreate(payload);
 			}),
 		);
@@ -161,7 +179,9 @@ export class DiveOtelProvider {
 		this.closeSpan(edge, error);
 	}
 
-	private onRecontext ({ edge, previousContext, context }: DiveRecontextPayload): void {
+	private onRecontext ({
+		edge, previousContext, context 
+	}: DiveRecontextPayload): void {
 		// One-shot span: the ownership transfer itself, parented on the OLD
 		// context's span (the handoff edge's parentId), so the trace shows
 		// where the callback's story crossed flows.
@@ -207,9 +227,15 @@ export class DiveOtelProvider {
 		if (edge.duration !== undefined) {
 			span.setAttribute('dive.duration_ms', edge.duration);
 		}
+		// the same lineage id stampConstructions puts on the span current at
+		// construction — a create span and the instance's lineage join on it
+		const { instance } = edge;
+		if (instance !== undefined && isMnemonicaInstance(instance)) {
+			span.setAttribute(ATTR_INSTANCE_ID, instanceRef(instance).id);
+		}
 		this.decorateSpan(span, edge);
 		if (edge.status === 'error') {
-			span.setStatus({ code: SpanStatusCode.ERROR });
+			span.setStatus({ code : SpanStatusCode.ERROR });
 			if (error instanceof Error) {
 				span.recordException(error);
 			}
@@ -218,15 +244,15 @@ export class DiveOtelProvider {
 	}
 
 	private findParentSpan (edge: FlowEdge): Span | undefined {		if (edge.parentId !== null) {
-			const own = this.spans.get(edge.parentId);
-			if (own) {
-				return own;
-			}
+		const own = this.spans.get(edge.parentId);
+		if (own) {
+			return own;
 		}
-		// Boundary (or evicted parent): adopt the active OTel span — the HTTP
-		// request span becomes the root of the dive branch.
-		const active = trace.getSpan(otelContext.active());
-		return active;
+	}
+	// Boundary (or evicted parent): adopt the active OTel span — the HTTP
+	// request span becomes the root of the dive branch.
+	const active = trace.getSpan(otelContext.active());
+	return active;
 	}
 
 	private closeSpan (edge: FlowEdge, error?: unknown): void {
@@ -244,7 +270,7 @@ export class DiveOtelProvider {
 			// sync throws carry no error value in the leave payload — the
 			// edge's own status is the truthful signal; the exception record
 			// is available only when settle carried the rejection itself
-			span.setStatus({ code: SpanStatusCode.ERROR });
+			span.setStatus({ code : SpanStatusCode.ERROR });
 			if (error instanceof Error) {
 				span.recordException(error);
 			}
@@ -278,9 +304,9 @@ export class DiveOtelProvider {
 		if (!match) {
 			return;
 		}
-		span.setAttribute('code.filepath', match[1]);
-		span.setAttribute('code.lineno', Number(match[2]));
-		span.setAttribute('code.column', Number(match[3]));
+		span.setAttribute('code.filepath', match[ 1 ]);
+		span.setAttribute('code.lineno', Number(match[ 2 ]));
+		span.setAttribute('code.column', Number(match[ 3 ]));
 	}
 
 	// Walk dive's parentage to the root edge id. Parents are recorded as
@@ -290,9 +316,9 @@ export class DiveOtelProvider {
 	private rootEdgeIdOf (edge: FlowEdge): number {
 		this.track(edge);
 		this.edgeParents.set(edge.id, edge.parentId);
-		let id = edge.id;
+		let { id } = edge;
 		let parent = edge.parentId;
-		const seen = new Set<number>([id]);
+		const seen = new Set<number>([ id ]);
 		while (parent !== null && !seen.has(parent)) {
 			seen.add(parent);
 			id = parent;

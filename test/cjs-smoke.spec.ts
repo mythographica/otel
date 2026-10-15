@@ -58,7 +58,7 @@ const script = `
 
 describe('CJS build (build-cjs/)', () => {
 	it('require()s cleanly and shares the mnemonica singleton', () => {
-		const out = execFileSync(process.execPath, ['-e', script], {
+		const out = execFileSync(process.execPath, [ '-e', script ], {
 			cwd      : root,
 			encoding : 'utf8',
 		});

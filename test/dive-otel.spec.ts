@@ -14,7 +14,10 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import { SpanStatusCode, context as otelContext, trace } from '@opentelemetry/api';
 import { wrap, clear, recordCreation, recordCreationError } from '@mnemonica/dive';
+import { createTypesCollection, utils } from 'mnemonica/module';
 import { DiveOtelProvider } from '../src/providers/dive-otel.provider.js';
+import { attachHooks } from '../src/hooks/attach-hooks.js';
+import { ATTR_INSTANCE_ID } from '../src/lineage-link.js';
 
 describe('DiveOtelProvider', () => {
 	let exporter: InMemorySpanExporter;
@@ -32,7 +35,7 @@ describe('DiveOtelProvider', () => {
 	});
 
 	it('spans a sync wrapped call', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(function loadData () {
 			return 42;
 		}, ctx);
@@ -43,21 +46,21 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('dive.call:loadData');
-		expect(spans[0].attributes['dive.kind']).toBe('call');
-		expect(spans[0].attributes['dive.name']).toBe('loadData');
-		expect(spans[0].attributes['dive.status']).toBe('ok');
-		expect(typeof spans[0].attributes['dive.duration_ms']).toBe('number');
+		expect(spans[ 0 ].name).toBe('dive.call:loadData');
+		expect(spans[ 0 ].attributes[ 'dive.kind' ]).toBe('call');
+		expect(spans[ 0 ].attributes[ 'dive.name' ]).toBe('loadData');
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('ok');
+		expect(typeof spans[ 0 ].attributes[ 'dive.duration_ms' ]).toBe('number');
 	});
 
 	it('nests child spans on dive trace parentage, not ALS', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const inner = wrap(function deepLoad () {
 			return 'deep';
 		}, ctx);
 		const outer = wrap(function shallowLoad () {
-			const result = inner();
-			return result;
+			const innerResult = inner();
+			return innerResult;
 		}, ctx);
 		const result = outer();
 
@@ -74,7 +77,7 @@ describe('DiveOtelProvider', () => {
 	});
 
 	it('an async span is NOT finished at the sync close — settle ends it', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(async function fetchAll () {
 			await new Promise((resolve) => setTimeout(resolve, 10));
 			return 'rows';
@@ -89,12 +92,12 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('dive.call:fetchAll');
-		expect(spans[0].attributes['dive.status']).toBe('ok');
+		expect(spans[ 0 ].name).toBe('dive.call:fetchAll');
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('ok');
 	});
 
 	it('a rejected chain closes the span with ERROR status and the exception', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const failure = new Error('db gone');
 		const wrapped = wrap(async function saveAll (): Promise<unknown> {
 			throw failure;
@@ -105,13 +108,13 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
-		expect(spans[0].attributes['dive.status']).toBe('error');
-		expect(spans[0].events.some((event) => event.name === 'exception')).toBe(true);
+		expect(spans[ 0 ].status.code).toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('error');
+		expect(spans[ 0 ].events.some((event) => event.name === 'exception')).toBe(true);
 	});
 
 	it('a sync throw still closes the span with ERROR status', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(function explode (): unknown {
 			throw new Error('sync boom');
 		}, ctx);
@@ -121,12 +124,12 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].status.code).toBe(SpanStatusCode.ERROR);
 	});
 
 	it('a re-wrap handoff produces a one-shot recontext span', async () => {
-		const first = { name: 'first' };
-		const second = { name: 'second' };
+		const first = { name : 'first' };
+		const second = { name : 'second' };
 		const wrapped = wrap(function handler () {
 			return 1;
 		}, first);
@@ -136,15 +139,15 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('dive.recontext:handler');
-		expect(spans[0].attributes['dive.handoff']).toBe(true);
+		expect(spans[ 0 ].name).toBe('dive.recontext:handler');
+		expect(spans[ 0 ].attributes[ 'dive.handoff' ]).toBe(true);
 	});
 
 	it('a boundary call adopts the active OTel span as parent', async () => {
 		const tracer = tracerProvider.getTracer('test');
 		const root = tracer.startSpan('http.request');
 
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(function handler () {
 			return 'ok';
 		}, ctx);
@@ -161,24 +164,41 @@ describe('DiveOtelProvider', () => {
 	});
 
 	it('a recorded construction produces a one-shot create span', async () => {
-		const instance = { name: 'thing' };
+		const instance = { name : 'thing' };
 		recordCreation('Thing', instance);
 		await tracerProvider.forceFlush();
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('dive.create:Thing');
-		expect(spans[0].attributes['dive.kind']).toBe('create');
-		expect(spans[0].attributes['dive.name']).toBe('Thing');
-		expect(spans[0].attributes['dive.status']).toBe('ok');
+		expect(spans[ 0 ].name).toBe('dive.create:Thing');
+		expect(spans[ 0 ].attributes[ 'dive.kind' ]).toBe('create');
+		expect(spans[ 0 ].attributes[ 'dive.name' ]).toBe('Thing');
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('ok');
 		// the hook moment IS the completion — duration is recorded as 0
-		expect(spans[0].attributes['dive.duration_ms']).toBe(0);
+		expect(spans[ 0 ].attributes[ 'dive.duration_ms' ]).toBe(0);
+		// a plain object is no mnemonica instance: no lineage id
+		expect(spans[ 0 ].attributes[ ATTR_INSTANCE_ID ]).toBeUndefined();
+	});
+
+	it('a create span carries mnemonica.instance.id — the id its lineage graph carries', async () => {
+		const collection = createTypesCollection({ name : 'otel-create-id' });
+		attachHooks(collection);
+		const IdThing = collection.define('IdThing', function () {});
+		const thing = new IdThing();
+		await tracerProvider.forceFlush();
+
+		const spans = exporter.getFinishedSpans();
+		const createSpan = spans.find((span) => span.name === 'dive.create:IdThing');
+		expect(createSpan).toBeDefined();
+		// the same id stampConstructions stamps and the error-path graph carries
+		const expectedId = utils.lineage([ thing ]).heads[ 0 ] as string;
+		expect(createSpan?.attributes[ ATTR_INSTANCE_ID ]).toBe(expectedId);
 	});
 
 	it('a construction inside a wrapped call joins the call’s trace', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(function build () {
-			const instance = { made: true };
+			const instance = { made : true };
 			recordCreation('Made', instance);
 			return instance;
 		}, ctx);
@@ -201,16 +221,16 @@ describe('DiveOtelProvider', () => {
 
 		const spans = exporter.getFinishedSpans();
 		expect(spans.length).toBe(1);
-		expect(spans[0].name).toBe('dive.create:Broken');
-		expect(spans[0].attributes['dive.status']).toBe('error');
-		expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
-		expect(spans[0].events.some((event) => event.name === 'exception')).toBe(true);
+		expect(spans[ 0 ].name).toBe('dive.create:Broken');
+		expect(spans[ 0 ].attributes[ 'dive.status' ]).toBe('error');
+		expect(spans[ 0 ].status.code).toBe(SpanStatusCode.ERROR);
+		expect(spans[ 0 ].events.some((event) => event.name === 'exception')).toBe(true);
 	});
 
 	it('attach is idempotent; detach stops the spans', async () => {
 		diveOtel.attach();
 
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const wrapped = wrap(function fn () {
 			return 1;
 		}, ctx);
@@ -239,21 +259,25 @@ describe('DiveOtelProvider — retention follows dive', () => {
 	});
 
 	it('keeps the true root edge id past 20000 unrelated edges', async () => {
-		const ctx = { name: 'ctx' };
+		const ctx = { name : 'ctx' };
 		const leaf = wrap(function leafCall () { return 1; }, ctx);
 		const mid = wrap(function midCall () {
 			for (let i = 0; i < 20005; i++) {
 				recordCreation('Noise', { i });
 			}
-			return leaf();
+			const leafResult = leaf();
+			return leafResult;
 		}, ctx);
-		const root = wrap(function rootCall () { return mid(); }, ctx);
+		const root = wrap(function rootCall () {
+			const midResult = mid();
+			return midResult;
+		}, ctx);
 		root();
 		await tracerProvider.forceFlush();
 
 		const spans = exporter.getFinishedSpans();
 		const rootSpan = spans.find((s) => s.name === 'dive.call:rootCall');
 		const leafSpan = spans.find((s) => s.name === 'dive.call:leafCall');
-		expect(leafSpan!.attributes['dive.root_edge_id']).toBe(rootSpan!.attributes['dive.edge_id']);
+		expect(leafSpan!.attributes[ 'dive.root_edge_id' ]).toBe(rootSpan!.attributes[ 'dive.edge_id' ]);
 	});
 });

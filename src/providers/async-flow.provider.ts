@@ -3,14 +3,16 @@
  *
  * Design: reports/async-flow-tracking-design.md.
  *
- * One AsyncLocalStorage carrying a linked list of FlowFrames. The root
- * frame is created per HTTP request by MnemonicaTraceMiddleware (or
- * manually via runInScope). Every dive 'enter' hook pushes a child frame
- * (edgeId = the entering edge); 'leave' restores the parent. ALS
- * propagation then does the tracking for free: an UNWRAPPED async hop
- * (setTimeout, promise continuation, async-generator suspension) fires
- * with the scheduling frame in als.getStore() — the parental dive edge
- * is known without wrapping anything.
+ * Each provider carries its OWN AsyncLocalStorage holding a linked list of
+ * FlowFrames — two providers attached at the same time (a default-dive one
+ * and an app-dive one) never read each other's frames. The root frame is
+ * created per HTTP request by MnemonicaTraceMiddleware (or manually via
+ * runInScope). Every dive 'enter' hook pushes a child frame (edgeId = the
+ * entering edge); 'leave' restores the parent. ALS propagation then does
+ * the tracking for free: an UNWRAPPED async hop (setTimeout, promise
+ * continuation, async-generator suspension) fires with the scheduling
+ * frame in als.getStore() — the parental dive edge is known without
+ * wrapping anything.
  *
  * The scoped pin: the root frame owns a pinSet of context instances
  * (strong refs), filled on enter/create from edge.instance. Lifetime is
@@ -21,7 +23,11 @@
  * adapter is the Node boundary where ALS is free.
  */
 import { AsyncLocalStorage } from 'async_hooks';
-import { registerHook } from '@mnemonica/dive';
+import {
+	resolveDive,
+	type DiveApi,
+	type DiveOption,
+} from '../dive-api.js';
 import type {
 	DiveCreatePayload,
 	DiveEnterPayload,
@@ -56,12 +62,20 @@ export type CrashContext = {
 	instances : object[];
 };
 
-const als = new AsyncLocalStorage<FlowFrame>();
-
 export class AsyncFlowProvider {
 	// edgeId → the frame entered for it, so leave restores the exact parent
 	private frames = new Map<number, FlowFrame>();
 	private detachers: Array<() => void> = [];
+	// the dive this provider subscribes to — the default dive unless the
+	// caller traces through their own
+	private dive: DiveApi;
+	// each provider's OWN store: two attached providers (a default-dive one
+	// and an app-dive one) never read each other's frames
+	private als = new AsyncLocalStorage<FlowFrame>();
+
+	constructor (options?: DiveOption) {
+		this.dive = resolveDive(options);
+	}
 
 	/**
 	 * Subscribe to dive's edge lifecycle. Idempotent: attaching twice would
@@ -73,23 +87,16 @@ export class AsyncFlowProvider {
 			return;
 		}
 		this.detachers.push(
-			registerHook('enter', (payload) => {
+			this.dive.registerHook('enter', (payload) => {
 				this.onEnter(payload);
 			}),
-			registerHook('leave', (payload) => {
+			this.dive.registerHook('leave', (payload) => {
 				this.onLeave(payload);
 			}),
+			this.dive.registerHook('create', (payload) => {
+				this.onCreate(payload);
+			}),
 		);
-		try {
-			this.detachers.push(
-				registerHook('create', (payload) => {
-					this.onCreate(payload);
-				}),
-			);
-		} catch {
-			// 'create' exists since dive 0.8.0; on 0.7.x registerHook throws —
-			// skipping preserves exactly the pre-subscription behavior.
-		}
 	}
 
 	detach (): void {
@@ -110,7 +117,7 @@ export class AsyncFlowProvider {
 			parent : null,
 			pinSet : new Set<object>(),
 		};
-		const result = als.run(root, fn);
+		const result = this.als.run(root, fn);
 		return result;
 	}
 
@@ -120,13 +127,13 @@ export class AsyncFlowProvider {
 	 * context instance pinned by the scope. Undefined outside any scope.
 	 */
 	currentFrame (): CrashContext | undefined {
-		const frame = als.getStore();
+		const frame = this.als.getStore();
 		if (!frame) {
 			return undefined;
 		}
 		const result: CrashContext = {
 			edgeId    : frame.edgeId,
-			instances : [...frame.pinSet],
+			instances : [ ...frame.pinSet ],
 		};
 		if (frame.edge !== undefined) {
 			result.edge = frame.edge;
@@ -135,7 +142,7 @@ export class AsyncFlowProvider {
 	}
 
 	private onEnter ({ edge }: DiveEnterPayload): void {
-		const current = als.getStore();
+		const current = this.als.getStore();
 		if (!current) {
 			return;
 		}
@@ -149,7 +156,7 @@ export class AsyncFlowProvider {
 			frame.pinSet.add(edge.instance);
 		}
 		this.frames.set(edge.id, frame);
-		als.enterWith(frame);
+		this.als.enterWith(frame);
 	}
 
 	private onLeave ({ edge }: DiveLeavePayload): void {
@@ -159,12 +166,12 @@ export class AsyncFlowProvider {
 		}
 		this.frames.delete(edge.id);
 		if (frame.parent) {
-			als.enterWith(frame.parent);
+			this.als.enterWith(frame.parent);
 		}
 	}
 
 	private onCreate ({ edge }: DiveCreatePayload): void {
-		const current = als.getStore();
+		const current = this.als.getStore();
 		if (!current) {
 			return;
 		}

@@ -15,16 +15,16 @@ import {
 
 describe('pre-root store', () => {
 	it('correlates every stamped request part to the same payload', () => {
-		const body = { hello: 'world' };
-		const query = { page: '2' };
-		const headers = { traceparent: '00-abc-def-01', 'x-request-id': 'req-1' };
-		feedPreRoot({ method: 'POST', url: '/x', params: { id: '1' }, query, body, headers });
+		const body = { hello : 'world' };
+		const query = { page : '2' };
+		const headers = { traceparent : '00-abc-def-01', 'x-request-id' : 'req-1' };
+		feedPreRoot({ method : 'POST', url : '/x', params : { id : '1' }, query, body, headers });
 
 		const viaBody = getPreRoot(body);
 		expect(viaBody?.raw).toEqual({
-			method  : 'POST',
-			url     : '/x',
-			params  : { id: '1' },
+			method : 'POST',
+			url    : '/x',
+			params : { id : '1' },
 			query,
 			body,
 			headers,
@@ -34,26 +34,26 @@ describe('pre-root store', () => {
 	});
 
 	it('returns undefined for unknown objects and primitives', () => {
-		expect(getPreRoot({ not: 'stamped' })).toBeUndefined();
+		expect(getPreRoot({ not : 'stamped' })).toBeUndefined();
 		expect(getPreRoot('primitive')).toBeUndefined();
 		expect(getPreRoot(null)).toBeUndefined();
 	});
 
 	it('primitive bodies are recorded but not correlatable', () => {
-		feedPreRoot({ method: 'POST', url: '/p', body: 'raw-string-body' });
+		feedPreRoot({ method : 'POST', url : '/p', body : 'raw-string-body' });
 		expect(getPreRoot('raw-string-body')).toBeUndefined();
 	});
 
 	it('feedValidatedPreRoot attaches the DTO to the boundary record', () => {
-		const body = { name: 'Alice' };
-		feedPreRoot({ method: 'POST', url: '/v', body });
-		const dto = { name: 'Alice', validated: true };
+		const body = { name : 'Alice' };
+		feedPreRoot({ method : 'POST', url : '/v', body });
+		const dto = { name : 'Alice', validated : true };
 		feedValidatedPreRoot(body, dto);
 		expect(getPreRoot(body)?.validated).toBe(dto);
 	});
 
 	it('feedValidatedPreRoot no-ops for unstamped objects and primitives', () => {
 		expect(() => feedValidatedPreRoot('primitive', {})).not.toThrow();
-		expect(() => feedValidatedPreRoot({ never: 'stamped' }, {})).not.toThrow();
+		expect(() => feedValidatedPreRoot({ never : 'stamped' }, {})).not.toThrow();
 	});
 });

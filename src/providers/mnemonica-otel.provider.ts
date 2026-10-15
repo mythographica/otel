@@ -6,10 +6,17 @@
  * context via AsyncLocalStorage.
  */
 import { AsyncLocalStorage } from 'async_hooks';
-import type { Tracer, Span } from '@opentelemetry/api';
-import { trace, context as otelContext } from '@opentelemetry/api';
-import type { hooksOpts, TypesCollection } from 'mnemonica/module';
-import { getProps } from 'mnemonica/module';
+import {
+	trace,
+	context as otelContext,
+	type Tracer,
+	type Span,
+} from '@opentelemetry/api';
+import {
+	getProps,
+	type hooksOpts,
+	type TypesCollection,
+} from 'mnemonica/module';
 
 const SymbolParentSpan = Symbol.for('mnemonica.span.parent');
 const asyncStorage = new AsyncLocalStorage<Span>();
@@ -25,11 +32,13 @@ export class MnemonicaOtelProvider {
 	}
 
 	getCurrentSpan (): Span | undefined {
-		return asyncStorage.getStore();
+		const store = asyncStorage.getStore();
+		return store;
 	}
 
 	runWithSpan<T> (span: Span, fn: () => T): T {
-		return asyncStorage.run(span, fn);
+		const result = asyncStorage.run(span, fn);
+		return result;
 	}
 
 	attachHooks (collection: TypesCollection): void {
@@ -79,10 +88,10 @@ export class MnemonicaOtelProvider {
 
 			// Store on new instance so its children can find the parent span
 			Object.defineProperty(newInstance, SymbolParentSpan, {
-				value       : span,
-				configurable: true,
-				enumerable  : false,
-				writable    : true,
+				value        : span,
+				configurable : true,
+				enumerable   : false,
+				writable     : true,
 			});
 		});
 
@@ -108,10 +117,10 @@ export class MnemonicaOtelProvider {
 
 			// Store on error instance for chain tracing
 			Object.defineProperty(newInstance, SymbolParentSpan, {
-				value       : span,
-				configurable: true,
-				enumerable  : false,
-				writable    : true,
+				value        : span,
+				configurable : true,
+				enumerable   : false,
+				writable     : true,
 			});
 		});
 	}
@@ -129,7 +138,7 @@ export class MnemonicaOtelProvider {
 
 		let current: object | null = parent;
 		while (current) {
-			const span = (current as Record<symbol, unknown>)[SymbolParentSpan] as Span | undefined;
+			const span = (current as Record<symbol, unknown>)[ SymbolParentSpan ] as Span | undefined;
 			if (span) {
 				return span;
 			}
